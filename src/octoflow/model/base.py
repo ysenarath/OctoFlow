@@ -22,7 +22,7 @@ class SessionError(ValueError): ...
 
 
 @contextmanager
-def persist_on_init(state: Optional[bool] = None) -> Generator[bool, None, None]:
+def persist_on_init(state: Optional[bool] = None) -> Generator[bool, None, None]:  # noqa: FBT001
     if state is None:
         yield persist_on_init_cv.get()
     else:
@@ -33,7 +33,7 @@ def persist_on_init(state: Optional[bool] = None) -> Generator[bool, None, None]
 
 @contextmanager
 def build_session(
-    engine_or_session_factory: Union[Engine, sessionmaker, None] = None
+    engine_or_session_factory: Union[Engine, sessionmaker, None] = None,
 ) -> Generator[Session, None, None]:
     """
     Context manager for managing SQLAlchemy sessions.
