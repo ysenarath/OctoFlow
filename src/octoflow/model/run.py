@@ -31,9 +31,6 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
-    def __post_init__(self):
-        self._namespace = None
-
     def _log_value(
         self,
         name: str,
