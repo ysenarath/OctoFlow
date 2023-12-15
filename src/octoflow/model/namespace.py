@@ -15,7 +15,7 @@ class Namespace:
         elif name is None:
             name = ""
         elif name != "" and not all(item.isidentifier() for item in name.split(".")):
-            msg = "variable names must contain valid python identifiers"
+            msg = "variable names must be valid python identifiers"
             raise ValueError(msg)
         items = name.rsplit(".", maxsplit=1)
         n_items = len(items)
@@ -63,6 +63,12 @@ class Namespace:
 
     def __repr__(self) -> Optional[str]:
         return self.name
+
+    def join(self, *others) -> Namespace:
+        root = self
+        for other in others:
+            root = getattr(root, other)
+        return root
 
 
 class NamespaceComparatorFactory(String.Comparator):  # noqa: PLW1641
