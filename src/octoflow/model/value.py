@@ -7,7 +7,7 @@ from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer
 
 from octoflow.model.base import Base
 
-JSONType = Union[None, int, str, bool, List["JSONType"], Dict[str, "JSONType"]]
+JSONType = Union[None, float, int, str, bool, List["JSONType"], Dict[str, "JSONType"]]
 
 
 class Value(Base):
