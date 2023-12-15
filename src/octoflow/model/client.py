@@ -6,6 +6,7 @@ from octoflow.model.experiment import Experiment
 
 class Client(SessionMixin):
     def __init__(self, tracking_uri: Optional[str] = None) -> None:
+        # if tracking_uri is None -> defaults to 'sqlite:///:memory:'
         self.engine = create_engine(tracking_uri)
 
     def create_experiment(self, name: str, description: Optional[str] = None) -> Experiment:

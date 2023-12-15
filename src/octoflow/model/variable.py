@@ -4,10 +4,10 @@ import enum
 import re
 from typing import Optional, Union
 
-from sqlalchemy import Column, Enum, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
 
 from octoflow.model.base import Base
-from octoflow.model.namespace import NamespaceType
 
 ValueType = Union[str, int, float]
 
@@ -24,13 +24,14 @@ class VariableType(enum.Enum):
 
 class Variable(Base):
     __tablename__ = "variable"
-    __table_args__ = (UniqueConstraint("experiment_id", "name", name="uc_experiment_name"),)
+    __table_args__ = (UniqueConstraint("experiment_id", "name", "namespace", name="uc_experiment_name"),)
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    experiment_id: int = Column(Integer, ForeignKey("experiment.id"), nullable=False)
-    name: str = Column(NamespaceType, nullable=False)
-    type: VariableType = Column(Enum(VariableType), nullable=False, default=VariableType.unknown)
-    description: Optional[str] = Column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    type: Mapped[VariableType] = mapped_column(Enum(VariableType), nullable=False, default=VariableType.unknown)
+    namespace: Mapped[str] = mapped_column(String, nullable=False, default="")
+    description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     @classmethod
     def get(
@@ -38,6 +39,7 @@ class Variable(Base):
         experiment_id: int,
         name: str,
         type: Optional[VariableType] = None,
+        namespace: Optional[str] = None,
     ) -> Optional[Variable]:
         with cls.session() as session:
             q = session.query(cls).filter_by(
@@ -46,6 +48,8 @@ class Variable(Base):
             )
             if type is not None:
                 q = q.filter(cls.type == type)
+            if namespace is not None:
+                q = q.filter(cls.namespace == namespace)
             obj = q.first()
         return obj
 
@@ -55,11 +59,13 @@ class Variable(Base):
         experiment_id: int,
         name: str,
         type: Optional[VariableType] = None,
+        namespace: Optional[str] = None,
     ):
         kwargs = {
             "experiment_id": experiment_id,
             "name": name,
             "type": type,
+            "namespace": "" if namespace is None else namespace,
         }
         original_error = None
         try:

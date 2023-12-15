@@ -163,15 +163,6 @@ class Base(DeclarativeBase, SessionMixin):
         if self.session_factory is None:
             msg = "session context is not available"
             raise ValueError(msg)
-        self.__post_init__(*args, **kwargs)
-
-    @sa.orm.reconstructor
-    def init_on_load(self):
-        # when object is constructed via sqlalchemy.orm
-        # get a ref to the session maker
-        self.session_factory: sessionmaker = sessionmaker_cv.get()
-
-    def __post_init__(self, *args, **kwargs):
         n_args = len(args)
         cls = type(self)
         for idx, (key, _) in enumerate(cls.__annotations__.items()):
@@ -186,6 +177,17 @@ class Base(DeclarativeBase, SessionMixin):
         with persist_on_init() as persist:
             if persist:
                 self.create()
+        self.__post_init__()
+
+    @sa.orm.reconstructor
+    def init_on_load(self):
+        # when object is constructed via sqlalchemy.orm
+        # get a ref to the session maker
+        self.session_factory: sessionmaker = sessionmaker_cv.get()
+        self.__post_init__()
+
+    def __post_init__(self):
+        pass
 
     def create(self):
         with self.session() as session:
@@ -272,8 +274,8 @@ def create_engine(url: Optional[str] = None):
 
     Examples
     --------
+    >>> engine = create_engine("sqlite:///logs/octoflow/database.sqlite")
     >>> engine = create_engine("postgresql://user:password@localhost/mydatabase")
-
     >>> engine = create_engine()  # Creates an SQLite in-memory database for testing
     """
     if url is None:

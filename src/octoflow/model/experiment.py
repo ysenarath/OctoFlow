@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from octoflow import logging
 from octoflow.model.base import Base
@@ -14,9 +15,9 @@ logger = logging.get_logger(__name__)
 class Experiment(Base):
     __tablename__ = "experiment"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    name: str = Column(String(255), nullable=False, unique=True)
-    description: str = Column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
 
     def start_run(
         self,

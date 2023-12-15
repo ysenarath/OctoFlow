@@ -1,4 +1,4 @@
-from octoflow.model import Client, Experiment, Namespace, Run, Value, Variable
+from octoflow.model import Client, Experiment, Run, Value, Variable
 
 __version__ = "0.0.1"
 
@@ -8,7 +8,4 @@ __all__ = [
     "Run",
     "Value",
     "Variable",
-    "Namespace",
 ]
-
-ns = Namespace()

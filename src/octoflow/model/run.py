@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import (
-    Column,
     DateTime,
     ForeignKey,
     Integer,
@@ -15,47 +14,43 @@ from sqlalchemy import (
     and_,
     or_,
 )
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import Mapped, aliased, mapped_column
 
 from octoflow.model.base import Base
-from octoflow.model.namespace import Namespace
 from octoflow.model.value import JSONType, Value
 from octoflow.model.variable import Variable, VariableType
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
 
 
 class Run(Base):
     __tablename__ = "run"
 
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    experiment_id: int = Column(Integer, ForeignKey("experiment.id"))
-    name: Optional[str] = Column(String, nullable=True)  # there can be multiple runs of same name
-    description: Optional[str] = Column(Text, nullable=True)
-    created_at: datetime = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: datetime = Column(DateTime, nullable=False, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id"))
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # there can be multiple runs of same name
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    def __post_init__(self):
+        self._namespace = None
 
     def _log_value(
         self,
-        variable: Union[Variable, Namespace, str],
+        name: str,
         value: JSONType,
+        *,
         step: Union[Value, int, None] = None,
+        namespace: Optional[str] = None,
         type: Optional[VariableType] = None,
     ) -> Value:
         step_id = step.id if isinstance(step, Value) else step
-        if isinstance(variable, str) or variable is None:
-            variable = Namespace(variable)
         with self.session():
-            if isinstance(variable, Namespace):
-                # convert namespace to variable in this experiment
-                variable = Variable.get_or_create(
-                    experiment_id=self.experiment_id,
-                    name=variable.name,
-                    type=type,
-                )
+            variable = Variable.get_or_create(
+                experiment_id=self.experiment_id,
+                name=name,
+                type=type,
+                namespace=namespace,
+            )
             result = Value(
                 run_id=self.id,
                 variable_id=variable.id,
@@ -89,80 +84,82 @@ class Run(Base):
 
     def _log_values(
         self,
-        value: JSONType,
-        variable: Union[Variable, Namespace, str] = None,
+        values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
         type: Optional[VariableType] = None,
+        namespace: Optional[str] = None,
     ) -> Dict[str, Value]:
         step_id = step.id if isinstance(step, Value) else step
-        if isinstance(variable, str) or variable is None:
-            variable = Namespace(variable)
         with self.session():
-            namespace = variable if isinstance(variable, Namespace) else Namespace(variable.name)
             result = {}
-            for k, v in self._flatten_values(value).items():
+            for name, named_value in self._flatten_values(values).items():
                 sub_var = Variable.get_or_create(
                     experiment_id=self.experiment_id,
-                    name=namespace.join(k).name,
+                    name=name,
                     type=type,
+                    namespace=namespace,
                 )
-                result[k] = Value(
+                result[name] = Value(
                     run_id=self.id,
                     variable_id=sub_var.id,
-                    value=v,
+                    value=named_value,
                     step_id=step_id,
                 )
         return result
 
     def log_param(
         self,
-        variable: Union[Variable, Namespace, str],
+        name: str,
         value: JSONType,
         step: Union[Value, int, None] = None,
+        namespace: Optional[str] = None,
     ) -> Value:
         return self._log_value(
-            variable=variable,
+            name=name,
             value=value,
             step=step,
             type=VariableType.parameter,
+            namespace=namespace,
         )
 
     def log_params(
         self,
-        value: JSONType,
-        variable: Union[Variable, Namespace, str] = None,
+        values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
+        namespace: Optional[str] = None,
     ) -> Value:
         return self._log_values(
-            variable=variable,
-            value=value,
+            values=values,
             step=step,
+            namespace=namespace,
             type=VariableType.parameter,
         )
 
     def log_metric(
         self,
-        variable: Union[Variable, Namespace, str],
+        name: str,
         value: JSONType,
         step: Union[Value, int, None] = None,
+        namespace: Optional[str] = None,
     ) -> Value:
         return self._log_value(
-            variable=variable,
+            name=name,
             value=value,
             step=step,
+            namespace=namespace,
             type=VariableType.metric,
         )
 
     def log_metrics(
         self,
-        value: JSONType,
-        variable: Union[Variable, Namespace, str] = None,
+        values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
+        namespace: Optional[str] = None,
     ) -> Value:
         return self._log_values(
-            variable=variable,
-            value=value,
+            values=values,
             step=step,
+            namespace=namespace,
             type=VariableType.metric,
         )
 
@@ -190,7 +187,7 @@ class Run(Base):
             val_2_leaf = aliased(Value)
             var_2 = aliased(Variable)
             sq = (
-                session.query(st_2.c.leaf_step_id, val_2.id.label("step_id"), var_2.name, val_2.value)
+                session.query(st_2.c.leaf_step_id, val_2.id.label("step_id"), var_2.namespace, var_2.name, val_2.value)
                 # include variables that are connected to the path to the leaf_step_id
                 .join(
                     # this step may include step variables that are connected to the path to leaf_step_id
@@ -215,14 +212,14 @@ class Run(Base):
             val_3 = aliased(Value)
             var_3 = aliased(Variable)
             st = (
-                session.query(st_3.c.leaf_step_id, st_3.c.step_id, var_3.name, val_3.value)
+                session.query(st_3.c.leaf_step_id, st_3.c.step_id, var_3.namespace, var_3.name, val_3.value)
                 .join(val_3, val_3.id == st_3.c.step_id)
                 .join(var_3, var_3.id == val_3.variable_id)
             )
             data = sq.union(st).all()
         result = []
         for _, g in itertools.groupby(sorted(data, key=GroupKey), GroupKey):
-            result.append({v.name: v.value for v in g})
+            result.append({f"{v.namespace}.{v.name}": v.value for v in g})
         return result
 
 
