@@ -38,18 +38,19 @@ class Variable(Base):
         cls,
         experiment_id: int,
         name: str,
-        type: Optional[VariableType] = None,
         namespace: Optional[str] = None,
+        type: Optional[VariableType] = None,
     ) -> Optional[Variable]:
+        if namespace is None:
+            namespace = ""
         with cls.session() as session:
             q = session.query(cls).filter_by(
                 experiment_id=experiment_id,
+                namespace=namespace,
                 name=name,
             )
             if type is not None:
                 q = q.filter(cls.type == type)
-            if namespace is not None:
-                q = q.filter(cls.namespace == namespace)
             obj = q.first()
         return obj
 
@@ -58,14 +59,14 @@ class Variable(Base):
         cls,
         experiment_id: int,
         name: str,
-        type: Optional[VariableType] = None,
         namespace: Optional[str] = None,
+        type: Optional[VariableType] = None,
     ):
         kwargs = {
             "experiment_id": experiment_id,
             "name": name,
             "type": type,
-            "namespace": "" if namespace is None else namespace,
+            "namespace": namespace,
         }
         original_error = None
         try:
