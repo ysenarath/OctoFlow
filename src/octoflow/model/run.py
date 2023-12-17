@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sqlalchemy import (
     DateTime,
@@ -41,6 +41,7 @@ class Run(Base):
         type: Optional[VariableType] = None,
     ) -> Value:
         step_id = step.id if isinstance(step, Value) else step
+        namespace, name = format_namespace(namespace, name)
         with self.session():
             variable = Variable.get_or_create(
                 experiment_id=self.experiment_id,
@@ -56,52 +57,25 @@ class Run(Base):
             )
         return result
 
-    @classmethod
-    def _flatten_values(
-        cls,
-        data: Dict[str, Any],
-        parent_key: str = "",
-        separator: str = ".",
-    ) -> dict[str, Any]:
-        items = []
-        for key, value in data.items():
-            # escape dots
-            new_key = parent_key + separator + key if parent_key else key
-            if isinstance(value, Mapping):
-                items.extend(
-                    cls._flatten_values(
-                        value,
-                        parent_key=new_key,
-                        separator=separator,
-                    ).items()
-                )
-            else:
-                items.append((new_key, value))
-        return dict(items)
-
     def _log_values(
         self,
+        *,
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
         type: Optional[VariableType] = None,
         namespace: Optional[str] = None,
-    ) -> Dict[str, Value]:
+    ) -> List[Value]:
         step_id = step.id if isinstance(step, Value) else step
-        with self.session():
-            result = {}
-            for name, named_value in self._flatten_values(values).items():
-                sub_var = Variable.get_or_create(
-                    experiment_id=self.experiment_id,
-                    name=name,
-                    type=type,
-                    namespace=namespace,
-                )
-                result[name] = Value(
-                    run_id=self.id,
-                    variable_id=sub_var.id,
-                    value=named_value,
-                    step_id=step_id,
-                )
+        result = []
+        for name, value in flatten_values(values).items():
+            value = self._log_value(
+                name=name,
+                value=value,
+                step=step_id,
+                namespace=namespace,
+                type=type,
+            )
+            result.append(value)
         return result
 
     def log_param(
@@ -124,7 +98,7 @@ class Run(Base):
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
         namespace: Optional[str] = None,
-    ) -> Value:
+    ) -> List[Value]:
         return self._log_values(
             values=values,
             step=step,
@@ -152,7 +126,7 @@ class Run(Base):
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
         namespace: Optional[str] = None,
-    ) -> Value:
+    ) -> List[Value]:
         return self._log_values(
             values=values,
             step=step,
@@ -221,23 +195,125 @@ class Run(Base):
 
 
 class GroupKey:
+    """
+    Class representing a key for grouping.
+
+    Parameters
+    ----------
+    value : SomeType
+        The value used as the key for grouping. It is expected to have a 'leaf_step_id' attribute.
+
+    Methods
+    -------
+    __lt__(other)
+        Compare this GroupKey with another for less than.
+
+    __eq__(other)
+        Compare this GroupKey with another for equality.
+
+    __hash__()
+        Compute the hash value for this GroupKey.
+
+    __repr__()
+        Return a string representation of this GroupKey.
+    """
+
     def __init__(self, value):
+        """
+        Initialize a GroupKey instance.
+
+        Parameters
+        ----------
+        value : SomeType
+            The value used as the key for grouping. It is expected to have a 'leaf_step_id' attribute.
+        """
         self.value = value.leaf_step_id
 
-    def __lt__(self, other):
+    def __lt__(self, other: GroupKey) -> bool:
+        """
+        Compare this GroupKey with another for less than.
+
+        Parameters
+        ----------
+        other : GroupKey
+            The other GroupKey instance to compare with.
+
+        Returns
+        -------
+        bool
+            True if this GroupKey is less than the other, False otherwise.
+        """
         if self.value is None:
             return other is None
         elif other.value is None:
-            return self.value is None
+            return True
         return self.value < other.value
 
     def __eq__(self, other):
+        """
+        Compare this GroupKey with another for equality.
+
+        Parameters
+        ----------
+        other : Any
+            The other object to compare with.
+
+        Returns
+        -------
+        bool
+            True if this GroupKey is equal to the other, False otherwise.
+        """
         if other is None:
             return self.value is None
         return self.value == other.value
 
     def __hash__(self):
+        """
+        Compute the hash value for this GroupKey.
+
+        Returns
+        -------
+        int
+            The hash value for this GroupKey.
+        """
         return hash(self.value)
 
     def __repr__(self):
+        """
+        Return a string representation of this GroupKey.
+
+        Returns
+        -------
+        str
+            A string representation of this GroupKey.
+        """
         return f"GroupKey({self.value})"
+
+
+def format_namespace(*names) -> Tuple[str, str]:
+    parts = ".".join([n for n in names if n is not None]).rsplit(".", maxsplit=1)
+    if len(parts) == 2:  # noqa: PLR2004
+        return parts
+    return None, parts[-1]
+
+
+def flatten_values(
+    data: Dict[str, Any],
+    parent_key: str = "",
+    separator: str = ".",
+) -> dict[str, Any]:
+    items = []
+    for key, value in data.items():
+        # escape dots
+        new_key = parent_key + separator + key if parent_key else key
+        if isinstance(value, Mapping):
+            items.extend(
+                flatten_values(
+                    value,
+                    parent_key=new_key,
+                    separator=separator,
+                ).items()
+            )
+        else:
+            items.append((new_key, value))
+    return dict(items)
