@@ -177,17 +177,12 @@ class Base(DeclarativeBase, SessionMixin):
         with persist_on_init() as persist:
             if persist:
                 self.create()
-        self.__post_init__()
 
     @sa.orm.reconstructor
     def init_on_load(self):
         # when object is constructed via sqlalchemy.orm
         # get a ref to the session maker
         self.session_factory: sessionmaker = sessionmaker_cv.get()
-        self.__post_init__()
-
-    def __post_init__(self):
-        pass
 
     def create(self):
         with self.session() as session:
