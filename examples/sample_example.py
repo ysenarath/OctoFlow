@@ -1,6 +1,6 @@
-import octoflow as of
+from octoflow import Client as OctoClient
 
-client = of.Client()
+client = OctoClient()
 
 expr = client.create_experiment("sample_experiment_1")
 
@@ -14,7 +14,8 @@ for time_step in range(1, 11):
     for epoch in range(1, 6):
         epoch_val = run.log_param("epoch", epoch, step=time_step_val)
         run.log_metric("f1_score", 1 / epoch, step=epoch_val)
-    __ = run.log_metrics(
+        run.log_metric("accuracy", 1 / epoch, step=epoch_val)
+    run.log_metrics(
         {
             "f1_score": 0.23,
             "accuracy": 0.23,
@@ -22,6 +23,7 @@ for time_step in range(1, 11):
         step=time_step_val,
     )
 
+
 logs = run.get_logs()
 
-print(logs)
+print(expr.search_runs())
