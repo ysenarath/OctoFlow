@@ -26,7 +26,7 @@ class Run(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id"))
-    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # there can be multiple runs of same name
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=False)  # there can be multiple runs of same name
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
