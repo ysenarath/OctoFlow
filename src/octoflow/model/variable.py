@@ -5,7 +5,7 @@ import re
 from typing import Optional, Union
 
 from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from octoflow.model.base import Base
 
@@ -80,3 +80,21 @@ class Variable(Base):
             msg = f"unable to get or create variable named '{name}'"
             raise ValueError(msg) from original_error
         return var
+
+    @validates("namespace")
+    def validate_namespace(self, key, namespace):  # noqa: PLR6301
+        if namespace is None:
+            namespace = ""
+        if len(namespace) == 0:
+            return namespace
+        if name_re.match(namespace) is None:
+            msg = "failed namespace validation"
+            raise ValueError(msg)
+        return namespace
+
+    @validates("name")
+    def validate_name(self, key, name):  # noqa: PLR6301
+        if name is None or "." in name or name_re.match(name) is None:
+            msg = "failed name validation"
+            raise ValueError(msg)
+        return name
