@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import enum
 import re
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, validates
+from sqlalchemy import Enum, ForeignKey, Integer, Select, String, UniqueConstraint, select
+from sqlalchemy.orm import Mapped, aliased, mapped_column, validates
+from sqlalchemy.sql import operators
 
 from octoflow.model.base import Base
+from octoflow.model.value import Value
 
 ValueType = Union[str, int, float]
 
@@ -98,3 +100,78 @@ class Variable(Base):
             msg = "failed name validation"
             raise ValueError(msg)
         return name
+
+    def _apply_operator(self, operator, value) -> Expression:
+        var = aliased(Variable)
+        val = aliased(Value)
+        stmt = (
+            select(val.run_id)
+            .join(var, var.id == val.variable_id)
+            .where(var.id == self.id)
+            .where(operator(val.value, value))
+        )
+        return Expression(stmt, self.experiment_id)
+
+    def __eq__(self, value: object) -> Expression:
+        return self._apply_operator(operators.eq, value)
+
+    def __ne__(self, value: object) -> Expression:
+        return self._apply_operator(operators.ne, value)
+
+    def __lt__(self, value: object) -> Expression:
+        return self._apply_operator(operators.lt, value)
+
+    def __gt__(self, value: object) -> Expression:
+        return self._apply_operator(operators.gt, value)
+
+    def __hash__(self) -> int:
+        return hash(self.as_tuple())
+
+    def as_tuple(self) -> Tuple[int, str, str]:
+        return tuple(
+            self.experiment_id,
+            self.namespace,
+            self.name,
+        )
+
+
+class Expression:
+    def __init__(
+        self,
+        stmt: Select,
+        experiment_id: int,
+    ) -> None:
+        self.stmt = stmt
+        self.experiment_id = experiment_id
+
+    @staticmethod
+    def validate(other: Expression, op_name: str):
+        if not isinstance(other, Expression):
+            msg = f"only expressions can be used with operator '{op_name}'"
+            raise ValueError(msg)
+        return True
+
+    def __and__(self, value: Expression):
+        self.validate(value, "and")
+        stmt = select("*").select_from(self.stmt).intersect(select("*").select_from(value.stmt))
+        return Expression(stmt, self.experiment_id)
+
+    def __or__(self, value: Expression):
+        self.validate(value, "or")
+        # stmt = self.stmt.union(value.stmt)
+        stmt = select("*").select_from(self.stmt).union(select("*").select_from(value.stmt))
+        return Expression(stmt, self.experiment_id)
+
+    def __invert__(self) -> Expression:
+        var = aliased(Variable)
+        val = aliased(Value)
+        stmt = (
+            select(val.run_id)
+            .join(var, var.id == val.variable_id)
+            .where(var.experiment_id == self.experiment_id)
+            .distinct()
+        )
+        all_stmt = select("*").select_from(stmt)
+        this_stmt = select("*").select_from(self.stmt)
+        stmt = all_stmt.except_(this_stmt)
+        return Expression(stmt, self.experiment_id)
