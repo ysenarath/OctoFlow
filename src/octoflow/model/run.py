@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import (
     DateTime,
@@ -12,10 +12,12 @@ from sqlalchemy import (
     String,
     Text,
     and_,
+    literal,
     or_,
 )
 from sqlalchemy.orm import Mapped, aliased, mapped_column
 
+from octoflow.model import namespace as ns
 from octoflow.model.base import Base
 from octoflow.model.value import JSONType, Value
 from octoflow.model.variable import Variable, VariableType
@@ -31,17 +33,72 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
+    def exists(self) -> List[int]:
+        # returns list of unique matching runs with same parameters
+        # if there are no matching runs this will return [] (empty list)
+        run_value = aliased(Value)
+        run_step_value = aliased(Value)
+        step_value = aliased(Value)
+        with self.session() as session:
+            result = (
+                session.query(Run.id, Variable.name, Value.value, run_value.value)
+                .select_from(Run)
+                .outerjoin(Variable, literal(1), full=True)
+                .filter(
+                    Variable.type == VariableType.parameter,
+                    Variable.experiment_id == self.experiment_id,
+                )
+                .outerjoin(
+                    # what happens if value if not found for variable -> null columns will be added
+                    # what happens if multiple values are found (e.g., for each step) -> multiple rows will be added
+                    Value,
+                    and_(
+                        Value.run_id == Run.id,
+                        Value.variable_id == Variable.id,
+                    ),
+                )
+                .outerjoin(step_value, step_value.id == Value.step_id)
+                .outerjoin(
+                    run_value,
+                    and_(
+                        run_value.variable_id == Variable.id,
+                    ),
+                )
+                .outerjoin(run_step_value, run_step_value.id == run_value.step_id)
+                .filter(
+                    # value context should match
+                    or_(
+                        and_(
+                            step_value.id.is_(None),
+                            step_value.id.is_(None),
+                        ),
+                        step_value.variable_id == run_step_value.variable_id,
+                    ),
+                    or_(
+                        Value.run_id.is_(None),
+                        Value.run_id != self.id,
+                    ),
+                    or_(
+                        run_value.id.is_(None),
+                        run_value.id == self.id,
+                    ),
+                )
+                .all()
+            )
+        return result
+
     def _log_value(
         self,
         name: str,
         value: JSONType,
         *,
         step: Union[Value, int, None] = None,
+        is_step: bool = False,
         namespace: Optional[str] = None,
         type: Optional[VariableType] = None,
     ) -> Value:
         step_id = step.id if isinstance(step, Value) else step
-        namespace, name = format_namespace(namespace, name)
+        namespace, name = ns.parse(namespace, name)
         with self.session():
             variable = Variable.get_or_create(
                 experiment_id=self.experiment_id,
@@ -62,6 +119,7 @@ class Run(Base):
         *,
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
+        is_step: bool = False,
         type: Optional[VariableType] = None,
         namespace: Optional[str] = None,
     ) -> List[Value]:
@@ -190,7 +248,7 @@ class Run(Base):
             data = sq.union(st).all()
         result = []
         for _, g in itertools.groupby(sorted(data, key=GroupKey), GroupKey):
-            result.append({f"{v.namespace}.{v.name}": v.value for v in g})
+            result.append({ns.join(v.namespace, v.name): v.value for v in g})
         return result
 
 
@@ -288,13 +346,6 @@ class GroupKey:
             A string representation of this GroupKey.
         """
         return f"GroupKey({self.value})"
-
-
-def format_namespace(*names) -> Tuple[str, str]:
-    parts = ".".join([n for n in names if n is not None]).rsplit(".", maxsplit=1)
-    if len(parts) == 2:  # noqa: PLR2004
-        return parts
-    return None, parts[-1]
 
 
 def flatten_values(
