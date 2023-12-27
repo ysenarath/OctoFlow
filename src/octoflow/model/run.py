@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
@@ -11,16 +10,11 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    and_,
-    literal,
-    or_,
 )
-from sqlalchemy.orm import Mapped, aliased, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
 
-from octoflow.model import namespace as ns
 from octoflow.model.base import Base
-from octoflow.model.value import JSONType, Value
-from octoflow.model.variable import Variable, VariableType
+from octoflow.model.value import JSONType, Value, ValueType
 
 
 class Run(Base):
@@ -33,84 +27,24 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
-    def exists(self) -> List[int]:
-        # returns list of unique matching runs with same parameters
-        # if there are no matching runs this will return [] (empty list)
-        run_value = aliased(Value)
-        run_step_value = aliased(Value)
-        step_value = aliased(Value)
-        with self.session() as session:
-            result = (
-                session.query(Run.id, Variable.name, Value.value, run_value.value)
-                .select_from(Run)
-                .outerjoin(Variable, literal(1), full=True)
-                .filter(
-                    Variable.type == VariableType.parameter,
-                    Variable.experiment_id == self.experiment_id,
-                )
-                .outerjoin(
-                    # what happens if value if not found for variable -> null columns will be added
-                    # what happens if multiple values are found (e.g., for each step) -> multiple rows will be added
-                    Value,
-                    and_(
-                        Value.run_id == Run.id,
-                        Value.variable_id == Variable.id,
-                    ),
-                )
-                .outerjoin(step_value, step_value.id == Value.step_id)
-                .outerjoin(
-                    run_value,
-                    and_(
-                        run_value.variable_id == Variable.id,
-                    ),
-                )
-                .outerjoin(run_step_value, run_step_value.id == run_value.step_id)
-                .filter(
-                    # value context should match
-                    or_(
-                        and_(
-                            step_value.id.is_(None),
-                            step_value.id.is_(None),
-                        ),
-                        step_value.variable_id == run_step_value.variable_id,
-                    ),
-                    or_(
-                        Value.run_id.is_(None),
-                        Value.run_id != self.id,
-                    ),
-                    or_(
-                        run_value.id.is_(None),
-                        run_value.id == self.id,
-                    ),
-                )
-                .all()
-            )
-        return result
-
     def _log_value(
         self,
-        name: str,
+        key: str,
         value: JSONType,
         *,
         step: Union[Value, int, None] = None,
         is_step: bool = False,
-        namespace: Optional[str] = None,
-        type: Optional[VariableType] = None,
+        type: Optional[ValueType] = None,
     ) -> Value:
         step_id = step.id if isinstance(step, Value) else step
-        namespace, name = ns.parse(namespace, name)
         with self.session():
-            variable = Variable.get_or_create(
-                experiment_id=self.experiment_id,
-                name=name,
-                type=type,
-                namespace=namespace,
-            )
             result = Value(
                 run_id=self.id,
-                variable_id=variable.id,
+                key=key,
                 value=value,
                 step_id=step_id,
+                is_step=is_step,
+                type=type,
             )
         return result
 
@@ -119,18 +53,15 @@ class Run(Base):
         *,
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
-        is_step: bool = False,
-        type: Optional[VariableType] = None,
-        namespace: Optional[str] = None,
+        type: Optional[ValueType] = None,
     ) -> List[Value]:
         step_id = step.id if isinstance(step, Value) else step
         result = []
-        for name, value in flatten_values(values).items():
+        for key, value in flatten_values(values).items():
             value = self._log_value(
-                name=name,
+                key=key,
                 value=value,
                 step=step_id,
-                namespace=namespace,
                 type=type,
             )
             result.append(value)
@@ -138,214 +69,60 @@ class Run(Base):
 
     def log_param(
         self,
-        name: str,
+        key: str,
         value: JSONType,
         step: Union[Value, int, None] = None,
-        namespace: Optional[str] = None,
+        is_step: bool = False,
     ) -> Value:
         return self._log_value(
-            name=name,
+            key=key,
             value=value,
             step=step,
-            type=VariableType.parameter,
-            namespace=namespace,
+            is_step=is_step,
+            type=ValueType.parameter,
         )
 
     def log_params(
         self,
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
-        namespace: Optional[str] = None,
     ) -> List[Value]:
         return self._log_values(
             values=values,
             step=step,
-            namespace=namespace,
-            type=VariableType.parameter,
+            type=ValueType.parameter,
         )
 
     def log_metric(
         self,
-        name: str,
+        key: str,
         value: JSONType,
         step: Union[Value, int, None] = None,
-        namespace: Optional[str] = None,
     ) -> Value:
         return self._log_value(
-            name=name,
+            key=key,
             value=value,
             step=step,
-            namespace=namespace,
-            type=VariableType.metric,
+            type=ValueType.metric,
         )
 
     def log_metrics(
         self,
         values: Dict[str, JSONType],
         step: Union[Value, int, None] = None,
-        namespace: Optional[str] = None,
     ) -> List[Value]:
         return self._log_values(
             values=values,
             step=step,
-            namespace=namespace,
-            type=VariableType.metric,
+            type=ValueType.metric,
         )
 
-    def get_logs(self) -> List[Dict]:
+    def get_logs(self) -> List[Value]:
         with self.session() as session:
-            val_0 = aliased(Value)
-            steps_tree = (
-                session.query(
-                    Value.step_id.label("leaf_step_id"),
-                    Value.step_id,
-                )
-                .filter(Value.run_id == self.id)
-                .outerjoin(val_0, val_0.step_id == Value.id)
-                .filter(val_0.id.is_(None))
-                .distinct(Value.step_id)
-            )
-            steps_tree = steps_tree.cte(recursive=True)
-            st_1 = aliased(steps_tree)
-            val_1 = aliased(Value)
-            steps_tree = steps_tree.union_all(
-                session.query(st_1.c.leaf_step_id, val_1.step_id).join(val_1, st_1.c.step_id == val_1.id)
-            )
-            st_2 = aliased(steps_tree)
-            val_2 = aliased(Value)
-            val_2_leaf = aliased(Value)
-            var_2 = aliased(Variable)
-            sq = (
-                session.query(st_2.c.leaf_step_id, val_2.id.label("step_id"), var_2.namespace, var_2.name, val_2.value)
-                # include variables that are connected to the path to the leaf_step_id
-                .join(
-                    # this step may include step variables that are connected to the path to leaf_step_id
-                    val_2,
-                    or_(
-                        and_(
-                            val_2.run_id == self.id,
-                            val_2.step_id.is_(None),
-                            st_2.c.step_id.is_(None),
-                        ),
-                        val_2.step_id == st_2.c.step_id,
-                    ),
-                )
-                # exclude all step variables (steps in the path to leaf_step_id will be added later)
-                .outerjoin(val_2_leaf, val_2_leaf.step_id == val_2.id)
-                .filter(val_2_leaf.id.is_(None))
-                # for var name
-                .join(var_2, var_2.id == val_2.variable_id)
-            )
-            # include steps in the path to leaf_step_id
-            st_3 = aliased(steps_tree)
-            val_3 = aliased(Value)
-            var_3 = aliased(Variable)
-            st = (
-                session.query(st_3.c.leaf_step_id, st_3.c.step_id, var_3.namespace, var_3.name, val_3.value)
-                .join(val_3, val_3.id == st_3.c.step_id)
-                .join(var_3, var_3.id == val_3.variable_id)
-            )
-            data = sq.union(st).all()
-        result = []
-        for _, g in itertools.groupby(sorted(data, key=GroupKey), GroupKey):
-            result.append({ns.join(v.namespace, v.name): v.value for v in g})
-        return result
+            logs = session.query(Value).filter(Value.run_id == self.id).all()
+        return logs
 
-
-class GroupKey:
-    """
-    Class representing a key for grouping.
-
-    Parameters
-    ----------
-    value : SomeType
-        The value used as the key for grouping. It is expected to have a 'leaf_step_id' attribute.
-
-    Methods
-    -------
-    __lt__(other)
-        Compare this GroupKey with another for less than.
-
-    __eq__(other)
-        Compare this GroupKey with another for equality.
-
-    __hash__()
-        Compute the hash value for this GroupKey.
-
-    __repr__()
-        Return a string representation of this GroupKey.
-    """
-
-    def __init__(self, value):
-        """
-        Initialize a GroupKey instance.
-
-        Parameters
-        ----------
-        value : SomeType
-            The value used as the key for grouping. It is expected to have a 'leaf_step_id' attribute.
-        """
-        self.value = value.leaf_step_id
-
-    def __lt__(self, other: GroupKey) -> bool:
-        """
-        Compare this GroupKey with another for less than.
-
-        Parameters
-        ----------
-        other : GroupKey
-            The other GroupKey instance to compare with.
-
-        Returns
-        -------
-        bool
-            True if this GroupKey is less than the other, False otherwise.
-        """
-        if self.value is None:
-            return other is None
-        elif other.value is None:
-            return True
-        return self.value < other.value
-
-    def __eq__(self, other):
-        """
-        Compare this GroupKey with another for equality.
-
-        Parameters
-        ----------
-        other : Any
-            The other object to compare with.
-
-        Returns
-        -------
-        bool
-            True if this GroupKey is equal to the other, False otherwise.
-        """
-        if other is None:
-            return self.value is None
-        return self.value == other.value
-
-    def __hash__(self):
-        """
-        Compute the hash value for this GroupKey.
-
-        Returns
-        -------
-        int
-            The hash value for this GroupKey.
-        """
-        return hash(self.value)
-
-    def __repr__(self):
-        """
-        Return a string representation of this GroupKey.
-
-        Returns
-        -------
-        str
-            A string representation of this GroupKey.
-        """
-        return f"GroupKey({self.value})"
+    def exists(self) -> List[int]: ...
 
 
 def flatten_values(

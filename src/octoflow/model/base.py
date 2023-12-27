@@ -245,7 +245,7 @@ class Base(DeclarativeBase, SessionMixin):
 
     def to_json(self):
         data = self.to_dict()
-        return json.dumps(data)
+        return json.dumps(data, sort_keys=True, default=str)
 
 
 def create_engine(url: Optional[str] = None):

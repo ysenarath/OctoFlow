@@ -1,4 +1,4 @@
-from octoflow.model import Client, Experiment, Run, Value, Variable
+from octoflow.model import Client, Experiment, Run, Value
 
 __version__ = "0.0.1"
 
@@ -7,5 +7,4 @@ __all__ = [
     "Experiment",
     "Run",
     "Value",
-    "Variable",
 ]
