@@ -4,7 +4,7 @@ from contextvars import ContextVar
 from typing import Any, Generator, Optional, Union
 
 import sqlalchemy as sa
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from typing_extensions import Protocol, dataclass_transform, runtime_checkable  # noqa: UP035
@@ -280,6 +280,11 @@ def create_engine(url: Optional[str] = None):
         url = "sqlite:///:memory:"
     # Create the SQLAlchemy engine
     engine = sa.create_engine(url, echo=False)
+    event.listen(engine, "connect", _fk_pragma_on_connect)
     # Create tables defined in the declarative base
     Base.metadata.create_all(engine)
     return engine
+
+
+def _fk_pragma_on_connect(dbapi_con, con_record):
+    dbapi_con.execute("pragma foreign_keys=ON")
