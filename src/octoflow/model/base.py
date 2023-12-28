@@ -62,6 +62,8 @@ def build_session(
     else:
         session_factory = engine_or_session_factory
     # Set the session factory as the global session maker for this coroutine
+    if session_factory is None:
+        session_factory = sessionmaker_cv.get()
     sessionmaker_token = sessionmaker_cv.set(session_factory)
     # Retrieve the current session from the context
     session: Session = session_cv.get()
