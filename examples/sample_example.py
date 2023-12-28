@@ -18,15 +18,12 @@ for time_step in range(1, 11):
         run.log_metric("accuracy", 1 / epoch, step=epoch_val)
     run.log_metrics(
         {
-            "final": {
-                "f1_score": 0.23,
-                "accuracy": 0.23,
-            }
+            "f1_score": 0.23,
+            "accuracy": 0.23,
         },
         step=time_step_val,
     )
 
-
-logs = [x.to_json() for x in run.get_logs()]
+logs = run.get_logs()
 
 print(logs)
