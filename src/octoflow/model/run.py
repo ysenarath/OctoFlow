@@ -6,13 +6,16 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import sqlalchemy as sa
 from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    and_,
+    literal,
+    not_,
+    or_,
     select,
 )
 from sqlalchemy.orm import Mapped, aliased, mapped_column
@@ -26,7 +29,7 @@ class Run(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id"))
-    name: Mapped[Optional[str]] = mapped_column(String, nullable=False)  # there can be multiple runs of same name
+    name: Mapped[str] = mapped_column(String, nullable=False)  # there can be multiple runs of same name
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
@@ -142,14 +145,14 @@ class Run(Base):
                     steps_alias.c.group_id,
                     value_alias,
                 )
-                .join(value_alias, sa.literal(1))
+                .join(value_alias, literal(1))
                 .filter(
-                    sa.or_(
+                    or_(
                         value_alias.id == steps_alias.c.path_step_id,
-                        sa.and_(
-                            sa.not_(value_alias.is_step),
-                            sa.or_(
-                                sa.and_(
+                        and_(
+                            not_(value_alias.is_step),
+                            or_(
+                                and_(
                                     value_alias.step_id.is_(None),
                                     steps_alias.c.path_step_id.is_(None),
                                 ),
