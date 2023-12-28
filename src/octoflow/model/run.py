@@ -1,20 +1,24 @@
 from __future__ import annotations
 
+import itertools
+from collections import defaultdict
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+import sqlalchemy as sa
 from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    select,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, aliased, mapped_column
 
 from octoflow.model.base import Base
-from octoflow.model.value import JSONType, Value, ValueType
+from octoflow.model.value import Value, ValuePyType, ValueType
 
 
 class Run(Base):
@@ -30,7 +34,7 @@ class Run(Base):
     def _log_value(
         self,
         key: str,
-        value: JSONType,
+        value: ValuePyType,
         *,
         step: Union[Value, int, None] = None,
         is_step: bool = False,
@@ -51,7 +55,7 @@ class Run(Base):
     def _log_values(
         self,
         *,
-        values: Dict[str, JSONType],
+        values: Dict[str, ValuePyType],
         step: Union[Value, int, None] = None,
         type: Optional[ValueType] = None,
     ) -> List[Value]:
@@ -70,7 +74,7 @@ class Run(Base):
     def log_param(
         self,
         key: str,
-        value: JSONType,
+        value: ValuePyType,
         step: Union[Value, int, None] = None,
         is_step: bool = False,
     ) -> Value:
@@ -84,7 +88,7 @@ class Run(Base):
 
     def log_params(
         self,
-        values: Dict[str, JSONType],
+        values: Dict[str, ValuePyType],
         step: Union[Value, int, None] = None,
     ) -> List[Value]:
         return self._log_values(
@@ -96,7 +100,7 @@ class Run(Base):
     def log_metric(
         self,
         key: str,
-        value: JSONType,
+        value: ValuePyType,
         step: Union[Value, int, None] = None,
     ) -> Value:
         return self._log_value(
@@ -108,7 +112,7 @@ class Run(Base):
 
     def log_metrics(
         self,
-        values: Dict[str, JSONType],
+        values: Dict[str, ValuePyType],
         step: Union[Value, int, None] = None,
     ) -> List[Value]:
         return self._log_values(
@@ -119,10 +123,56 @@ class Run(Base):
 
     def get_logs(self) -> List[Value]:
         with self.session() as session:
-            logs = session.query(Value).filter(Value.run_id == self.id).all()
+            steps_tree = (
+                select(Value.id.label("group_id"), Value.id.label("path_step_id"))
+                .where(Value.is_step)
+                .cte(recursive=True)
+            )
+            steps_alias = steps_tree.alias()
+            value_alias = aliased(Value)
+            steps_tree = steps_tree.union_all(
+                select(steps_alias.c.group_id, value_alias.step_id.label("path_step_id")).join(
+                    value_alias, steps_alias.c.path_step_id == value_alias.id
+                )
+            )
+            steps_alias = steps_tree.alias()
+            value_alias = aliased(Value)
+            data = (
+                session.query(
+                    steps_alias.c.group_id,
+                    value_alias,
+                )
+                .join(value_alias, sa.literal(1))
+                .filter(
+                    sa.or_(
+                        value_alias.id == steps_alias.c.path_step_id,
+                        sa.and_(
+                            sa.not_(value_alias.is_step),
+                            sa.or_(
+                                sa.and_(
+                                    value_alias.step_id.is_(None),
+                                    steps_alias.c.path_step_id.is_(None),
+                                ),
+                                value_alias.step_id == steps_alias.c.path_step_id,
+                            ),
+                        ),
+                    )
+                )
+                .distinct()
+                .all()
+            )
+        logs = defaultdict(list)
+        g: List[Tuple[int, Value]]
+        for k, g in itertools.groupby(data, keyfunc):
+            logs[k].extend([(v.key, v.value) for _, v in g])
         return logs
 
     def exists(self) -> List[int]: ...
+
+
+def keyfunc(row: Tuple[int, Value]) -> Tuple[int, Value]:
+    first = row[0]
+    return -1 if first is None else first
 
 
 def flatten_values(

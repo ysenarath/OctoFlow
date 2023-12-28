@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from octoflow.model.base import Base
 
-JSONType = Union[None, float, int, str, bool, List["JSONType"], Dict[str, "JSONType"]]
+ValuePyType = Union[None, float, int, str, bool, List["ValuePyType"], Dict[str, "ValuePyType"]]
 
 
 class ValueType(enum.Enum):
@@ -37,7 +37,7 @@ class Value(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[int] = mapped_column(Integer, ForeignKey("run.id"))
     key: Mapped[str] = mapped_column(String)
-    value: Mapped[JSONType] = mapped_column(JSON, nullable=True)  # Assuming you want to store JSON data
+    value: Mapped[ValuePyType] = mapped_column(JSON, nullable=True)  # Assuming you want to store JSON data
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     step_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("value.id"), nullable=True)
     is_step: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -48,7 +48,10 @@ class Value(Base):
             "ix_value_run_id_key_step_id_step",
             run_id,
             key,
-            step_id,
+            case(
+                (step_id.is_(None), -1),
+                else_=step_id,
+            ),
             case(
                 (is_step, value),
                 else_=key,
