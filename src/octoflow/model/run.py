@@ -82,9 +82,11 @@ class Run(Base):
     ) -> List[Value]:
         """Log multiple values."""
         result = []
+        prefix = "" if prefix is None else str(prefix).strip()
         for key, value in value_utils.flatten(values).items():
-            if prefix is not None:
-                key = f"{prefix}.{key}"
+            if len(prefix) > 0:
+                d = "." if prefix[-1] != "." else ""
+                key = f"{prefix}{d}{key}"
             value = self._log_value(
                 key=key,
                 value=value,
