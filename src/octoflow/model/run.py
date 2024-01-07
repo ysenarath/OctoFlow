@@ -78,10 +78,13 @@ class Run(Base):
         values: Dict[str, ValueType],
         step: Optional[Value] = None,
         type: Optional[VariableType] = None,
+        prefix: Optional[str] = None,
     ) -> List[Value]:
         """Log multiple values."""
         result = []
         for key, value in value_utils.flatten(values).items():
+            if prefix is not None:
+                key = f"{prefix}.{key}"
             value = self._log_value(
                 key=key,
                 value=value,
@@ -124,6 +127,7 @@ class Run(Base):
         self,
         values: Dict[str, ValueType],
         step: Optional[Value] = None,
+        prefix: Optional[str] = None,
     ) -> List[Value]:
         """Log multiple parameters.
 
@@ -143,6 +147,7 @@ class Run(Base):
             values=values,
             step=step,
             type=VariableType.parameter,
+            prefix=prefix,
         )
 
     def log_metric(
@@ -178,6 +183,7 @@ class Run(Base):
         self,
         values: Dict[str, ValueType],
         step: Optional[Value] = None,
+        prefix: Optional[str] = None,
     ) -> List[Value]:
         """Log multiple metrics.
 
@@ -190,6 +196,7 @@ class Run(Base):
             values=values,
             step=step,
             type=VariableType.metric,
+            prefix=prefix,
         )
 
     def get_raw_logs(self) -> List[Tuple[int, int, int, str, Any]]:
