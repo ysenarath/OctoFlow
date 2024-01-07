@@ -1,8 +1,15 @@
-import json
+import os
+import time
+from pathlib import Path
 
 from octoflow import Client
 
-client = Client()
+database_path = Path(os.path.dirname(os.path.realpath(__file__))) / ".." / "logs" / "octoflow.db"
+
+# if database_path.exists():
+#     os.remove(database_path)
+
+client = Client("sqlite:///logs/octoflow.db")
 
 expr = client.create_experiment("sample_experiment_1")
 
@@ -18,6 +25,7 @@ for time_step in range(1, 11):
         random_int_val = run.log_param("random_int", epoch, step=epoch_val)
         run.log_metric("f1_score", 1 / epoch, step=epoch_val)
         run.log_metric("accuracy", 1 / epoch, step=epoch_val)
+        time.sleep(5)
     run.log_metrics(
         {
             "final": {
@@ -28,8 +36,19 @@ for time_step in range(1, 11):
         step=time_step_val,
     )
 
-logs = run.get_logs()
+# print(run.get_logs())
 
-print(json.dumps(logs, indent=4, default=str))
+# run = expr.start_run()
 
-print(logs.filter("f1_score").to_frame())
+# run.log_param("num_time_steps", 10)
+# run.log_param("num_epochs", 5)
+
+# if run.exists():
+#     run.delete()
+#     del run
+
+# run = expr.start_run()
+
+# run.log_param("num_time_steps", 10)
+# run.log_param("num_epochs", 5)
+# run.log_param("learning_rate", 1e-5)
