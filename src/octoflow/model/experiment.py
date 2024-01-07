@@ -1,4 +1,6 @@
 from __future__ import annotations
+from collections import UserList
+import math
 
 from typing import List, Optional
 
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from octoflow import logging
 from octoflow.model.base import Base
 from octoflow.model.run import Run
+from octoflow.model.variable import Variable
 
 logger = logging.get_logger(__name__)
 
@@ -39,18 +42,29 @@ class Experiment(Base):
     def search_runs(
         self,
         name: Optional[str] = None,
-        offset: int = 0,
-        length: Optional[int] = 1,
+        page: int = 1,
+        per_page: Optional[int] = 10,
         # expression: Optional[Expression] = None,
     ) -> List[Run]:
+        offset = (page - 1) * per_page
         with self.session() as session:
             q = session.query(Run)
             # if expression is not None:
             #     q = q.filter(Run.id.in_(expression.stmt))
-            q = q.order_by(desc(Run.created_at)).offset(offset)
             if name is not None:
                 q = q.filter(Run.name == name)
-            if length is not None:
-                q = q.limit(length)
+            # get number of pages
+            total = q.count()
+            q = q.order_by(desc(Run.created_at))
+            if per_page is not None:
+                q = q.offset(offset).limit(per_page)
             result = q.all()
+        result = UserList(result)
+        result.total = total
+        result.num_pages = math.ceil(total / per_page)
         return result
+
+    def get_variables(self) -> List[Variable]:
+        with self.session() as session:
+            variables = session.query(Variable).filter(Variable.experiment_id == self.id).all()
+        return variables

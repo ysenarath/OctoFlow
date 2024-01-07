@@ -22,7 +22,7 @@ class SessionError(ValueError): ...
 
 
 @contextmanager
-def persist_on_init(state: Optional[bool] = None) -> Generator[bool, None, None]:  # noqa: FBT001
+def persist_on_init(state: Optional[bool] = None) -> Generator[bool, None, None]:
     if state is None:
         yield persist_on_init_cv.get()
     else:
@@ -153,7 +153,7 @@ class SessionMixin:
             with build_session(self.engine) as session:
                 yield session
         else:
-            msg = "type with unknown protocol"
+            msg = f"unknown session type: {type(self).__name__}"
             raise TypeError(msg)
 
 
@@ -163,7 +163,7 @@ class Base(DeclarativeBase, SessionMixin):
         super(Base, self).__init__()
         self.session_factory: sessionmaker = sessionmaker_cv.get()
         if self.session_factory is None:
-            msg = "session context is not available"
+            msg = "no session object in the context, and session_factory is None"
             raise ValueError(msg)
         n_args = len(args)
         cls = type(self)
@@ -193,9 +193,9 @@ class Base(DeclarativeBase, SessionMixin):
                 session.add(self)
                 session.commit()
             except SQLAlchemyError as err:
-                logger.error(f"Faield to persist '{type(self).__name__}'.")
+                logger.error(f"Failed to persist '{type(self).__name__}'.")
                 session.rollback()
-                msg = f"unable to persist '{type(self).__name__}' object"
+                msg = f"unable to persist '{type(self).__name__}' object with attributes: {self.to_dict()}"
                 raise ValueError(msg) from err
 
     def __setattr__(self, name: str, value: Any):
@@ -208,9 +208,7 @@ class Base(DeclarativeBase, SessionMixin):
                     super(Base, self).__setattr__(name, value)
                     session.merge(self)
                     session.commit()
-                    logger.info(
-                        f"Successfully updated the  attribute '{name}' of '{type(self).__name__}' to '{value}'."
-                    )
+                    logger.info(f"Updated attribute '{name}' of '{type(self).__name__}' to '{value}'.")
                 except SQLAlchemyError as err:
                     logger.info(f"Failed to update attribute '{name}' of '{type(self).__name__}' to '{value}'.")
                     session.rollback()
@@ -220,14 +218,15 @@ class Base(DeclarativeBase, SessionMixin):
         else:
             super(Base, self).__setattr__(name, value)
 
-    def delete(self):
+    def delete(self) -> Any:
         with self.session() as session:
             try:
-                logger.info(f"Deleting object '{type(self).__name__}'.")
+                logger.info(f"Deleting '{type(self).__name__}'.")
                 session.delete(self)
                 session.commit()
+                logger.info(f"Deleted '{type(self).__name__}'.")
             except SQLAlchemyError as err:
-                logger.error(f"Failed to delete object '{type(self).__name__}'.")
+                logger.error(f"Failed to delete '{type(self).__name__}'.")
                 session.rollback()
                 msg = f"unable to delete '{type(self).__name__}'"
                 raise ValueError(msg) from err

@@ -1,7 +1,14 @@
+"""Run model.
+
+This module contains the run model.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+from octoflow.model import value_utils
 
 try:
     import pandas as pd
@@ -20,12 +27,18 @@ from octoflow.model.base import Base
 from octoflow.model.value import Value, ValueType
 from octoflow.model.variable import Variable, VariableType
 
+__all__ = [
+    "Run",
+]
+
 
 class Run(Base):
+    """Run model."""
+
     __tablename__ = "run"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id"))
+    experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String, nullable=False)  # there can be multiple runs of same name
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
@@ -39,14 +52,17 @@ class Run(Base):
         step: Optional[Value] = None,
         type: Optional[VariableType] = None,
     ) -> Value:
+        """Log a value."""
         parent_id = None if step is None else step.variable_id
         step_id = None if step is None else step.id
         with self.session():
+            # get or create variable
             variable = Variable.get(
                 key=key,
                 experiment_id=self.experiment_id,
                 parent_id=parent_id,
                 type=type,
+                create=True,  # create variable if it does not exist
             )
             value = Value(
                 run_id=self.id,
@@ -63,8 +79,9 @@ class Run(Base):
         step: Optional[Value] = None,
         type: Optional[VariableType] = None,
     ) -> List[Value]:
+        """Log multiple values."""
         result = []
-        for key, value in flatten_values(values).items():
+        for key, value in value_utils.flatten(values).items():
             value = self._log_value(
                 key=key,
                 value=value,
@@ -80,6 +97,22 @@ class Run(Base):
         value: ValueType,
         step: Optional[Value] = None,
     ) -> Value:
+        """Log a parameter.
+
+        Parameters
+        ----------
+        key : str
+            Parameter key.
+        value : ValueType
+            Parameter value.
+        step : Optional[Value], optional
+            Step value, by default None.
+
+        Returns
+        -------
+        Value
+            Value instance.
+        """
         return self._log_value(
             key=key,
             value=value,
@@ -92,6 +125,20 @@ class Run(Base):
         values: Dict[str, ValueType],
         step: Optional[Value] = None,
     ) -> List[Value]:
+        """Log multiple parameters.
+
+        Parameters
+        ----------
+        values : Dict[str, ValueType]
+            Dictionary of values.
+        step : Optional[Value], optional
+            Step value, by default None.
+
+        Returns
+        -------
+        List[Value]
+            List of values.
+        """
         return self._log_values(
             values=values,
             step=step,
@@ -104,6 +151,22 @@ class Run(Base):
         value: ValueType,
         step: Optional[Value] = None,
     ) -> Value:
+        """Log a metric.
+
+        Parameters
+        ----------
+        key : str
+            Metric key.
+        value : ValueType
+            Metric value.
+        step : Optional[Value], optional
+            Step value, by default None.
+
+        Returns
+        -------
+        Value
+            Value instance.
+        """
         return self._log_value(
             key=key,
             value=value,
@@ -116,34 +179,94 @@ class Run(Base):
         values: Dict[str, ValueType],
         step: Optional[Value] = None,
     ) -> List[Value]:
+        """Log multiple metrics.
+
+        Parameters
+        ----------
+        values : Dict[str, ValueType]
+            Dictionary of values.
+        """
         return self._log_values(
             values=values,
             step=step,
             type=VariableType.metric,
         )
 
-    def get_logs(self) -> List[Dict[str, Any]]: ...
+    def get_raw_logs(self) -> List[Tuple[int, int, int, str, Any]]:
+        """Get all logs of the run.
 
-    def exists(self) -> List[int]: ...
-
-
-def flatten_values(
-    data: Dict[str, Any],
-    parent_key: str = "",
-    separator: str = ".",
-) -> dict[str, Any]:
-    items = []
-    for key, value in data.items():
-        # escape dots
-        new_key = parent_key + separator + key if parent_key else key
-        if isinstance(value, Mapping):
-            items.extend(
-                flatten_values(
-                    value,
-                    parent_key=new_key,
-                    separator=separator,
-                ).items()
+        Returns
+        -------
+        List[Tuple[int, int, int, str, Any]]
+            List of logs.
+        """
+        with self.session() as session:
+            # get all values of this run and their corresponding variable keys
+            values = (
+                session.query(
+                    Value.run_id,
+                    Value.id,
+                    Value.step_id,
+                    Variable.key,
+                    Value.value,
+                )
+                .select_from(Value)
+                .join(Variable, Variable.id == Value.variable_id)
+                .filter(Value.run_id == self.id)
+                .distinct(Value.id)
+                .all()
             )
-        else:
-            items.append((new_key, value))
-    return dict(items)
+        return values
+
+    def get_logs(self) -> List[Dict[str, Any]]:
+        """Get all logs of the run.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of logs.
+        """
+        values = self.get_raw_logs()
+        trees = value_utils.build_trees(values)
+        return trees[self.id][None]
+
+    def exists(self, partial: bool = True) -> bool:
+        """Checks whether the run with same values for parameter typed variables exists in the database.
+
+        Parameters
+        ----------
+        partial : bool, optional
+            Whether to check for partial match, by default True.
+
+        Returns
+        -------
+        bool
+            Whether the run exists.
+        """
+        with self.session() as session:
+            # get all values of this run and their corresponding variable keys
+            values = (
+                session.query(
+                    Value.run_id,
+                    Value.id,
+                    Value.step_id,
+                    Variable.key,
+                    Value.value,
+                )
+                .select_from(Value)
+                .join(Variable, Variable.id == Value.variable_id)
+                .filter(
+                    Variable.experiment_id == self.experiment_id,
+                    Variable.type == VariableType.parameter,
+                )
+                .distinct(Value.id)
+                .all()
+            )
+            # build up a tree of values
+            trees = value_utils.build_trees(values)
+        # check whether there is a run with same values
+        if self.id not in trees:
+            msg = f"run with id '{self.id}' does not exist"
+            raise ValueError(msg)
+        this = trees.pop(self.id)
+        return any(value_utils.equals(this[None], other[None], partial=partial) for other in trees.values())
