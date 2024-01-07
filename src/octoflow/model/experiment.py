@@ -1,7 +1,7 @@
 from __future__ import annotations
-from collections import UserList
-import math
 
+import math
+from collections import UserList
 from typing import List, Optional
 
 import randomname
