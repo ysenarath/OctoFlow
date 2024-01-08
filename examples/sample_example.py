@@ -18,12 +18,11 @@ run = expr.start_run()
 run.log_param("num_time_steps", 10)
 run.log_param("num_epochs", 5)
 
-for time_step in range(1, 11):
+for time_step in range(1, 3):
     time_step_val = run.log_param("time_step", time_step)
-    for epoch in range(1, 6):
+    for epoch in range(1, 3):
         epoch_val = run.log_param("epoch", epoch, step=time_step_val)
-        random_int_val = run.log_param("random_int", epoch, step=epoch_val)
-        time.sleep(1)
+        time.sleep(0.1)
         run.log_metric("f1_score", 1 / epoch, step=epoch_val)
         run.log_metric("accuracy", 1 / epoch, step=epoch_val)
     run.log_metrics(
@@ -35,3 +34,17 @@ for time_step in range(1, 11):
         },
         step=time_step_val,
     )
+
+logs = run.get_logs()
+
+print(logs.select("num_time_steps", "time_step", "final.f1_score", "epoch", "f1_score"))
+
+print("Done!")
+
+run = expr.start_run()
+
+run.log_param("num_time_steps", 10)
+run.log_param("num_epochs", 5)
+
+if run.exists():
+    print("Run exists!")
