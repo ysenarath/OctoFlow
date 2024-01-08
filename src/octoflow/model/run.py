@@ -21,7 +21,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, aliased, mapped_column
 
 from octoflow.model.base import Base
 from octoflow.model.value import Value, ValueType
@@ -206,38 +206,41 @@ class Run(Base):
 
         Returns
         -------
-        List[Tuple[int, int, int, str, Any]]
+        List[Tuple[int, int, int, bool, str, Any]]
             List of logs.
         """
         with self.session() as session:
+            child_value = aliased(Value)
             # get all values of this run and their corresponding variable keys
             values = (
                 session.query(
                     Value.run_id,
                     Value.id,
                     Value.step_id,
+                    child_value.id.is_not(None).label("is_step"),
                     Variable.key,
                     Value.value,
                 )
                 .select_from(Value)
                 .join(Variable, Variable.id == Value.variable_id)
+                .outerjoin(child_value, child_value.step_id == Value.id)
                 .filter(Value.run_id == self.id)
                 .distinct(Value.id)
                 .all()
             )
         return values
 
-    def get_logs(self) -> List[Dict[str, Any]]:
+    def get_logs(self) -> value_utils.ValueTree:
         """Get all logs of the run.
 
         Returns
         -------
-        List[Dict[str, Any]]
+        ValueTree
             List of logs.
         """
         values = self.get_raw_logs()
         trees = value_utils.build_trees(values)
-        return trees[self.id][None]
+        return trees[self.id]
 
     def exists(self, partial: bool = True) -> bool:
         """Checks whether the run with same values for parameter typed variables exists in the database.
@@ -254,16 +257,19 @@ class Run(Base):
         """
         with self.session() as session:
             # get all values of this run and their corresponding variable keys
+            child_value = aliased(Value)
             values = (
                 session.query(
                     Value.run_id,
                     Value.id,
                     Value.step_id,
+                    child_value.id.is_not(None).label("is_step"),
                     Variable.key,
                     Value.value,
                 )
                 .select_from(Value)
                 .join(Variable, Variable.id == Value.variable_id)
+                .outerjoin(child_value, child_value.step_id == Value.id)
                 .filter(
                     Variable.experiment_id == self.experiment_id,
                     Variable.type == VariableType.parameter,
@@ -277,5 +283,5 @@ class Run(Base):
         if self.id not in trees:
             msg = f"run with id '{self.id}' does not exist"
             raise ValueError(msg)
-        this = trees.pop(self.id)
-        return any(value_utils.equals(this[None], other[None], partial=partial) for other in trees.values())
+        this = trees.pop(self.id).normalize()
+        return any(value_utils.equals(this, other.normalize(), partial=partial) for other in trees.values())
