@@ -6,7 +6,7 @@ This module contains the run model.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from octoflow.model import value_utils
 
@@ -242,7 +242,7 @@ class Run(Base):
         trees = value_utils.build_trees(values)
         return trees[self.id]
 
-    def exists(self, partial: bool = True) -> bool:
+    def match(self, partial: bool = True) -> Generator[int, None, None]:
         """Checks whether the run with same values for parameter typed variables exists in the database.
 
         Parameters
@@ -250,10 +250,10 @@ class Run(Base):
         partial : bool, optional
             Whether to check for partial match, by default True.
 
-        Returns
-        -------
-        bool
-            Whether the run exists.
+        Yields
+        ------
+        Generator[int, None, None]
+            Generator of run IDs.
         """
         with self.session() as session:
             # get all values of this run and their corresponding variable keys
@@ -284,4 +284,7 @@ class Run(Base):
             msg = f"run with id '{self.id}' does not exist"
             raise ValueError(msg)
         this = trees.pop(self.id).normalize()
-        return any(value_utils.equals(this, other.normalize(), partial=partial) for other in trees.values())
+        for run_id, other in trees.items():
+            other = other.normalize()
+            if value_utils.equals(this, other, partial=partial):
+                yield run_id
