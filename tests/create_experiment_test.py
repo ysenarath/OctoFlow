@@ -1,6 +1,6 @@
 import unittest
 
-from octoflow.model import Client, Experiment
+from octoflow.core import Client, Experiment
 
 EXPERIMENT_DESCRIPTION = "This is a test experiment"
 
