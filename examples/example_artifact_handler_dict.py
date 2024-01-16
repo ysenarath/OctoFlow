@@ -9,7 +9,7 @@ print()
 
 handler_class = handler.get_handler_type("json")
 
-f = handler_class(path="logs/sample-folder")
+f = handler_class(path="logs/logged-artifact-dict-json")
 
 data = {
     "a": [1, 2, 3],
@@ -30,3 +30,7 @@ try:
     print("Done")
 except FileNotFoundError:
     print("File does not exist")
+
+print("Unlinking file...", end="\t")
+f.unlink()
+print("Done")
