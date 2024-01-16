@@ -35,6 +35,16 @@ for time_step in range(1, 3):
         step=time_step_val,
     )
 
+has_completed = run.get_param("completed", False)
+
+print(f"Has completed (Before): {'Yes' if has_completed else 'No'}")
+
+run.log_param("completed", True)
+
+has_completed = run.get_param("completed", False)
+
+print(f"Has completed (After): {'Yes' if has_completed else 'No'}")
+
 logs = run.get_logs()
 
 print(logs.select("num_time_steps", "time_step", "final.f1_score", "epoch", "f1_score"))

@@ -18,7 +18,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import Mapped, aliased, mapped_column
-from sqlalchemy.orm.exc import MultipleResultsFound
+from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
 from octoflow.core import artifact, value_utils
 from octoflow.core.artifact import Artifact
@@ -29,6 +29,8 @@ from octoflow.core.variable import Variable, VariableType
 __all__ = [
     "Run",
 ]
+
+NOT_SPECIFIED = object()
 
 
 def generate_uuid() -> str:
@@ -154,6 +156,55 @@ class Run(Base):
             type=VariableType.parameter,
             prefix=prefix,
         )
+
+    def get_param(
+        self,
+        key: str,
+        default: Optional[ValueType] = NOT_SPECIFIED,
+        *,
+        step: Optional[Value] = NOT_SPECIFIED,
+    ) -> ValueType:
+        """Get a parameter.
+
+        Parameters
+        ----------
+        key : str
+            Parameter key.
+        default : Optional[ValueType], optional
+            Default value, by default NOT_SPECIFIED.
+        step : Optional[Value], optional
+            Step value, by default NOT_SPECIFIED.
+
+        Returns
+        -------
+        Value
+            Value instance.
+        """
+        with self.session() as session:
+            q = (
+                session.query(Value)
+                .join(Variable)
+                .filter(
+                    Value.run_id == self.id,
+                    Variable.key == key,
+                    Variable.type == VariableType.parameter,
+                )
+            )
+            if step is None:
+                q = q.filter(Value.step_id.is_(None))
+            if step is not NOT_SPECIFIED:
+                q = q.filter(Value.step_id == step.id)
+            try:
+                value = q.one().value
+            except NoResultFound as e:
+                if default is NOT_SPECIFIED:
+                    msg = f"parameter with key '{key}' does not exist"
+                    raise ValueError(msg) from e
+                value = default
+            except MultipleResultsFound as e:
+                msg = f"multiple parameters with key '{key}' exist"
+                raise ValueError(msg) from e
+        return value
 
     def log_metric(
         self,
