@@ -189,11 +189,11 @@ class Base(DeclarativeBase, SessionMixin):
     def create(self):
         with self.session() as session:
             try:
-                logger.info(f"Persisting '{type(self).__name__}'.")
+                logger.debug(f"Persisting '{type(self).__name__}'.")
                 session.add(self)
                 session.commit()
             except SQLAlchemyError as err:
-                logger.error(f"Failed to persist '{type(self).__name__}'.")
+                logger.debug(f"Failed to persist '{type(self).__name__}'.")
                 session.rollback()
                 msg = f"unable to persist '{type(self).__name__}' object with attributes: {self.to_dict()}"
                 raise ValueError(msg) from err
@@ -204,13 +204,13 @@ class Base(DeclarativeBase, SessionMixin):
             revert_if_fails_value = value
             with self.session() as session:
                 try:
-                    logger.info(f"Updating attribute '{name}' of '{type(self).__name__}' to '{value}'.")
+                    logger.debug(f"Updating attribute '{name}' of '{type(self).__name__}' to '{value}'.")
                     super(Base, self).__setattr__(name, value)
                     session.merge(self)
                     session.commit()
-                    logger.info(f"Updated attribute '{name}' of '{type(self).__name__}' to '{value}'.")
+                    logger.debug(f"Updated attribute '{name}' of '{type(self).__name__}' to '{value}'.")
                 except SQLAlchemyError as err:
-                    logger.info(f"Failed to update attribute '{name}' of '{type(self).__name__}' to '{value}'.")
+                    logger.debug(f"Failed to update attribute '{name}' of '{type(self).__name__}' to '{value}'.")
                     session.rollback()
                     super(Base, self).__setattr__(name, revert_if_fails_value)
                     msg = f"unable to set '{name}'"
@@ -221,10 +221,10 @@ class Base(DeclarativeBase, SessionMixin):
     def delete(self) -> Any:
         with self.session() as session:
             try:
-                logger.info(f"Deleting '{type(self).__name__}'.")
+                logger.debug(f"Deleting '{type(self).__name__}'.")
                 session.delete(self)
                 session.commit()
-                logger.info(f"Deleted '{type(self).__name__}'.")
+                logger.debug(f"Deleted '{type(self).__name__}'.")
             except SQLAlchemyError as err:
                 logger.error(f"Failed to delete '{type(self).__name__}'.")
                 session.rollback()

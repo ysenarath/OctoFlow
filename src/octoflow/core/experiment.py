@@ -9,9 +9,9 @@ from sqlalchemy import Integer, String, Text, desc
 from sqlalchemy.orm import Mapped, mapped_column
 
 from octoflow import logging
-from octoflow.model.base import Base
-from octoflow.model.run import Run
-from octoflow.model.variable import Variable
+from octoflow.core.base import Base
+from octoflow.core.run import Run
+from octoflow.core.variable import Variable
 
 logger = logging.get_logger(__name__)
 
@@ -22,6 +22,7 @@ class Experiment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)
+    artifact_uri: Mapped[str] = mapped_column(String(255), nullable=True)
 
     def start_run(
         self,

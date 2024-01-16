@@ -5,15 +5,11 @@ This module contains the run model.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
-from typing import Any, Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
-from octoflow.model import value_utils
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
+from packaging.version import Version
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -22,14 +18,21 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import Mapped, aliased, mapped_column
+from sqlalchemy.orm.exc import MultipleResultsFound
 
-from octoflow.model.base import Base
-from octoflow.model.value import Value, ValueType
-from octoflow.model.variable import Variable, VariableType
+from octoflow.core import artifact, value_utils
+from octoflow.core.artifact import Artifact
+from octoflow.core.base import Base
+from octoflow.core.value import Value, ValueType
+from octoflow.core.variable import Variable, VariableType
 
 __all__ = [
     "Run",
 ]
+
+
+def generate_uuid() -> str:
+    return str(uuid.uuid4())
 
 
 class Run(Base):
@@ -39,10 +42,10 @@ class Run(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     experiment_id: Mapped[int] = mapped_column(Integer, ForeignKey("experiment.id", ondelete="CASCADE"))
-    name: Mapped[str] = mapped_column(String, nullable=False)  # there can be multiple runs of same name
+    name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, default=generate_uuid)
 
     def _log_value(
         self,
@@ -200,6 +203,98 @@ class Run(Base):
             type=VariableType.metric,
             prefix=prefix,
         )
+
+    def log_artifact(
+        self,
+        key: str,
+        value: Any = None,
+        *,
+        version: Union[str, Version, None] = None,
+        handler_type: Optional[str] = None,
+        save: bool = True,
+        **kwargs: Dict[str, Any],
+    ) -> Artifact:
+        """Log an artifact.
+
+        Parameters
+        ----------
+        key : str
+            Artifact key.
+        value : Optional[Any], optional
+            Artifact value, by default None.
+        version : Union[str, Version, None], optional
+            Artifact version, by default None.
+        path : Union[str, Path]
+            Artifact path.
+        handler_type : Union[str, None]
+            Artifact handler (name), by default None.
+        save : bool, optional
+            Whether to save the artifact, by default True.
+        kwargs : Dict[str, Any]
+            Additional keyword arguments.
+
+        Returns
+        -------
+        Value
+            Value instance.
+        """
+        if handler_type is None and value is not None:
+            handler_type = artifact.get_handler_type_by_object(value)
+        elif isinstance(handler_type, str):
+            # validate if a handler for type exists
+            handler_type = artifact.get_handler_type(handler_type)
+        with self.session():
+            a = Artifact(
+                run_id=self.id,
+                key=key,
+                handler_type=handler_type,
+                version=version,
+            )
+        if save:
+            a.save(value, **kwargs)
+        return a
+
+    def get_artifact(
+        self,
+        key: str,
+        version: Union[str, Version, None] = None,
+    ) -> Artifact:
+        """Load an artifact.
+
+        Parameters
+        ----------
+        key : str
+            Artifact key.
+        version : Union[str, Version, None], optional
+            Artifact version, by default None.
+
+        Returns
+        -------
+        Any
+            Artifact value.
+        """
+        with self.session() as session:
+            q = session.query(Artifact).filter(
+                Artifact.run_id == self.id,
+                Artifact.key == key,
+            )
+            if version is not None and str(version) == "latest":
+                a = q.order_by(Artifact.version.desc()).first()
+            else:
+                if version is not None:
+                    q = q.filter(Artifact.version == str(version))
+                try:
+                    a = q.one_or_none()
+                except MultipleResultsFound as e:
+                    if version is None:
+                        # ask user to specify version to narrow down the search
+                        msg = f"multiple artifacts with key '{key}' exist, please specify version"
+                        raise ValueError(msg) from e
+                    raise e
+        if a is None:
+            msg = f"artifact with key '{key}' does not exist"
+            raise ValueError(msg)
+        return a
 
     def get_raw_logs(self) -> List[Tuple[int, int, int, str, Any]]:
         """Get all logs of the run.
