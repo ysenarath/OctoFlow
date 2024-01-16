@@ -46,10 +46,22 @@ run.log_artifact("test.predictions", pred_df, version="1.0.0")
 run.log_artifact("test.predictions", pred_df, version="1.0.1")
 run.log_artifact("test.predictions", pred_df, version="1.0.2")
 
+# delete the latest version
+
 artifact = run.get_artifact("test.predictions", version="latest")
 
-print(artifact.version)
+print("latest version:", artifact.version)
 
 pred_df: pd.DataFrame = artifact.load()
 
-print(pred_df)
+print("loaded predictions of latest version:", pred_df)
+
+print(f"deleting latest version ({artifact.version})...", end=" ")
+
+artifact.delete(unlink=True)
+
+print("success")
+
+artifact = run.get_artifact("test.predictions", version="latest")
+
+print("latest version after deleting:", artifact.version)
