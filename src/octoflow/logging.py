@@ -14,7 +14,7 @@ class LoggingFactory:
     def __init__(
         self,
         name: Optional[str] = None,
-        level: Union[int, str] = logging.DEBUG,
+        level: Union[int, str] = logging.INFO,
         formatter: str = DEFAULT_LOGGING_FORMAT,
         handlers: Sequence[str] = DEFAULT_LOGGING_HANDLERS,
     ) -> None:
