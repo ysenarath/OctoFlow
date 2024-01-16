@@ -16,7 +16,7 @@ temp_df = pd.DataFrame({
 
 handler_class = handler.get_handler_type_by_object(temp_df)
 
-f = handler_class(path="logs/sample-folder-df")
+f = handler_class(path="logs/logged-artifact-pandas-dataframe")
 
 if not f.exists():
     print("File does not exist")
@@ -31,7 +31,7 @@ try:
     df = f.load()
     print("Done")
 except FileNotFoundError:
-    print("File does not exist")
+    print("Failed")
 
 print("Unlinking file...", end="\t")
 f.unlink()
