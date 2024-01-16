@@ -1,4 +1,5 @@
-from octoflow.model import Client, Experiment, Run, Value
+from octoflow import plugins
+from octoflow.core import Client, Experiment, Run, Value
 
 __version__ = "0.0.6"
 
@@ -8,3 +9,5 @@ __all__ = [
     "Run",
     "Value",
 ]
+
+plugins.import_modules()
