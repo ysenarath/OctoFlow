@@ -1,7 +1,7 @@
 from octoflow import plugins
 from octoflow.core import Client, Experiment, Run, Value
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"
 
 __all__ = [
     "Client",
