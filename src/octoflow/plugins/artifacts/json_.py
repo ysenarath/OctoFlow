@@ -14,6 +14,9 @@ class JSONArtifactHandler(ArtifactHandler, name="json"):
     def can_handle(cls, obj: Any) -> bool:
         return isinstance(obj, Mapping)
 
+    def exists(self) -> bool:
+        return (self.path / "data.json").exists()
+
     def load(self):
         encoding = self.metadata.get("encoding", "utf-8")
         with open(self.path / "data.json", encoding=encoding) as f:

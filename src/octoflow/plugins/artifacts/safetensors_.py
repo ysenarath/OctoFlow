@@ -46,6 +46,9 @@ class DictNumpyArrayHandler(ArtifactHandler, name="safetensors.numpy"):
             return False
         return isinstance(obj, Mapping) and all(isinstance(t, np.ndarray) for t in obj.values())
 
+    def exists(self) -> bool:
+        return (self.path / "data.safetensors").exists()
+
     def load(self) -> Mapping[str, ndarray]:
         tensors = {}
         with safe_open(self.path / "data.safetensors", framework="np") as f:
@@ -75,6 +78,9 @@ class DictTorchTensorHandler(ArtifactHandler, name="safetensors.torch"):
             return False
         return isinstance(obj, Mapping) and all(isinstance(t, TorchTensor) for t in obj.values())
 
+    def exists(self) -> bool:
+        return (self.path / "data.safetensors").exists()
+
     def load(self) -> Mapping[str, TorchTensor]:
         tensors = {}
         with safe_open(self.path / "data.safetensors", framework="pt") as f:
@@ -103,6 +109,9 @@ class DictTensorFlowTensorHandler(ArtifactHandler, name="safetensors.tensorflow"
         if tf is None:
             return False
         return isinstance(obj, Mapping) and all(tf.is_tensor(t) for t in obj.values())
+
+    def exists(self) -> bool:
+        return (self.path / "data.safetensors").exists()
 
     def load(self) -> Mapping[str, TensorFlowTensor]:
         tensors = {}

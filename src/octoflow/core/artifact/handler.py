@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import abc
-import contextlib
 import json
-import os
+import shutil
 import weakref
 from pathlib import Path
-from typing import Any, Dict, Generator, List, MutableMapping, Type, Union
+from typing import Any, Dict, Generator, List, Type, Union
 
-from filelock import FileLock
+from octoflow.utils.mutation import MutableDict
 
 _handler_types: Dict[str, Type[ArtifactHandler]] = {}
 
@@ -34,62 +33,27 @@ def list_handler_types() -> List[str]:
     return list(_handler_types.keys())
 
 
-class ArtifactMetadata(MutableMapping[str, Any]):
+class ArtifactMetadata(MutableDict[str, Any]):
     def __init__(self, handler: ArtifactHandler) -> None:
-        super().__init__()
         self.handler_ref = weakref.ref(handler)
+        super().__init__(self._load_data())
+        self.add_event_listener("change", self._on_change)
 
     @property
     def handler(self) -> ArtifactHandler:
         return self.handler_ref()
 
-    def open(self) -> Generator[Dict[str, Any], None, None]:
-        lock_path = self.handler.path / ".metadata.json.lock"
-        with FileLock(lock_path):
-            path = self.handler.path / ".metadata.json"
-            if path.exists():
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-                data = yield data
-            else:
-                data = yield {}
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f)
+    def _on_change(self) -> Generator[Dict[str, Any], None, None]:
+        path = self.handler.path / ".metadata.json"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self._data, f)
 
-    def __getitem__(self, key: str) -> Any:
-        c = self.open()
-        data = c.send(None)
-        value = data[key]
-        return value
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        c = self.open()
-        data = c.send(None)
-        data[key] = value
-        with contextlib.suppress(StopIteration):
-            c.send(data)
-
-    def __delitem__(self, key: str) -> None:
-        c = self.open()
-        data = c.send(None)
-        del data[key]
-        with contextlib.suppress(StopIteration):
-            c.send(data)
-
-    def __iter__(self) -> Generator[str, None, None]:
-        c = self.open()
-        data = c.send(None)
-        yield from data
-
-    def __len__(self):
-        c = self.open()
-        data = c.send(None)
-        return len(data)
-
-    def __repr__(self) -> str:
-        c = self.open()
-        data = c.send(None)
-        return repr(data)
+    def _load_data(self) -> Dict[str, Any]:
+        path = self.handler.path / ".metadata.json"
+        if not path.exists():
+            return {}
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
 
 
 class ArtifactHandlerType(abc.ABCMeta):
@@ -181,7 +145,7 @@ class ArtifactHandler(metaclass=ArtifactHandlerType):
         bool
             True if the artifact exists.
         """
-        return Path(self.path).exists()
+        raise NotImplementedError
 
     def unlink(self):
         """
@@ -196,6 +160,6 @@ class ArtifactHandler(metaclass=ArtifactHandlerType):
         if not path.exists():
             return
         if path.is_dir():
-            os.rmdir(path)
+            shutil.rmtree(path)
         else:
             path.unlink()

@@ -1,6 +1,5 @@
-import pickle
-from pathlib import Path
-from typing import Any, Union
+import pickle  # noqa: S403
+from typing import Any
 
 from octoflow.core.artifact.handler import ArtifactHandler
 
@@ -10,18 +9,19 @@ __all__ = [
 
 
 class PickleArtifactHandler(ArtifactHandler, name="pickle"):
-    def __init__(self, path: Union[Path, str], protocol: int = 4):
-        super().__init__(path)
-        self.protocol = protocol
-
     @classmethod
     def can_handle(cls, obj: Any) -> bool:
         return False
 
-    def load(self) -> Any:
-        with open(self.path / "data.pickle", "rb") as f:
-            return pickle.load(f)  # noqa: S301
+    def exists(self) -> bool:
+        return (self.path / "data.pickle").exists()
 
-    def save(self, obj):
+    def load(self) -> Any:
+        protocol = self.metadata.get("protocol", 4)
+        with open(self.path / "data.pickle", "rb") as f:
+            return pickle.load(f, protocol=protocol)  # noqa: S301
+
+    def save(self, obj, protocol: int = 4):
+        self.metadata["protocol"] = protocol
         with open(self.path / "data.pickle", "wb") as f:
-            pickle.dump(obj, f, protocol=self.protocol)
+            pickle.dump(obj, f, protocol=protocol)

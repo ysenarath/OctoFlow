@@ -22,6 +22,10 @@ class PreTrainedModelHandler(ArtifactHandler, name="transformers.PreTrainedModel
             return False
         return isinstance(obj, (PreTrainedModel, TFPreTrainedModel))
 
+    def exists(self) -> bool:
+        model_dir = self.path / "model"
+        return (self.path / "task.json").exists() and model_dir.exists() and model_dir.is_dir()
+
     def load(self) -> Union[PreTrainedModel, TFPreTrainedModel]:
         with open(self.path / "task.json", encoding="utf-8") as f:
             kwargs = json.load(f)

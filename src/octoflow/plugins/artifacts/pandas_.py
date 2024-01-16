@@ -14,6 +14,9 @@ class PadndasDataFrameArtifactHandler(ArtifactHandler, name="pandas.DataFrame"):
     def can_handle(cls, obj: Any) -> bool:
         return isinstance(obj, pd.DataFrame)
 
+    def exists(self) -> bool:
+        return (self.path / "data.csv").exists()
+
     def load(self) -> DataFrame:
         return pd.read_csv(
             self.path / "data.csv",
