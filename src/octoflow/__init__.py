@@ -2,7 +2,7 @@ from octoflow import logging, plugins
 from octoflow.config import Config
 from octoflow.tracking import Client, Experiment, Run, Value
 
-__version__ = "0.0.9"
+__version__ = "0.0.10"
 
 __all__ = [
     "Client",
