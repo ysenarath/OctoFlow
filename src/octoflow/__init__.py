@@ -1,6 +1,5 @@
-from octoflow import plugins
+from octoflow import logging, plugins
 from octoflow.config import Config
-from octoflow.logging import LoggingFactory
 from octoflow.tracking import Client, Experiment, Run, Value
 
 __version__ = "0.0.9"
@@ -12,8 +11,24 @@ __all__ = [
     "Value",
     "Config",
     "LoggingFactory",
+    "logging",
 ]
 
 plugins.package.import_modules()
 
-config = Config()
+config = Config({
+    "resources": {
+        "path": "~/.octoflow",
+    },
+    "logging": {
+        "level": "INFO",
+        "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+    },
+})
+
+
+logger = logging.get_logger(
+    name=next(iter(__package__.split("."))),
+    level=config.logging.level,
+    formatter=config.logging.format,
+)
