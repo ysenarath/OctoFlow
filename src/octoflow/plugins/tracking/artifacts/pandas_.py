@@ -1,6 +1,6 @@
 from typing import Any
 
-from octoflow.core.artifact.handler import ArtifactHandler
+from octoflow.tracking.artifact.handler import ArtifactHandler
 
 try:
     import pandas as pd

@@ -9,9 +9,9 @@ from sqlalchemy import Integer, String, Text, desc
 from sqlalchemy.orm import Mapped, mapped_column
 
 from octoflow import logging
-from octoflow.core.base import Base
-from octoflow.core.run import Run
-from octoflow.core.variable import Variable
+from octoflow.tracking.base import Base
+from octoflow.tracking.run import Run
+from octoflow.tracking.variable import Variable
 
 logger = logging.get_logger(__name__)
 

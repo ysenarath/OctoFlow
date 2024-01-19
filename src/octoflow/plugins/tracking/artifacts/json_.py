@@ -2,7 +2,7 @@ import json
 from collections.abc import Mapping
 from typing import Any, Union
 
-from octoflow.core.artifact.handler import ArtifactHandler
+from octoflow.tracking.artifact.handler import ArtifactHandler
 
 __all__ = [
     "JSONArtifactHandler",

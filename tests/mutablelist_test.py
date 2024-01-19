@@ -2,7 +2,7 @@ import contextlib
 import unittest
 from contextvars import ContextVar
 
-from octoflow.utils.mutation import MutableList
+from octoflow.utils.collections import MutableList
 
 # track changes to the context
 changed_var = ContextVar("changed")

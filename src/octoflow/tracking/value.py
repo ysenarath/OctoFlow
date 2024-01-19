@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from octoflow.core.base import Base
+from octoflow.tracking.base import Base
 
 ValueType = Union[None, float, int, str, bool, List["ValueType"], Dict[str, "ValueType"]]
 

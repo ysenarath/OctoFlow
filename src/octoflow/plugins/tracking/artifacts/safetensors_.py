@@ -1,6 +1,6 @@
 from typing import Any, Mapping
 
-from octoflow.core.artifact.handler import ArtifactHandler
+from octoflow.tracking.artifact.handler import ArtifactHandler
 
 try:
     import numpy as np

@@ -8,7 +8,7 @@ except ImportError:
     PreTrainedModel = None
     TFPreTrainedModel = None
 
-from octoflow.core.artifact.handler import ArtifactHandler
+from octoflow.tracking.artifact.handler import ArtifactHandler
 
 __all__ = [
     "PreTrainedModelHandler",

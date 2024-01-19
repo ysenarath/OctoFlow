@@ -21,10 +21,17 @@ class Package:
             if package is None:
                 package = __package__
             try:
-                importlib.import_module(
+                module = importlib.import_module(
                     name=name,
                     package=package,
                 )
             except Exception:
                 msg = f"failed to import '{name}' from '{package}' in '{self.name}'"
                 raise ImportError(msg) from None
+            if not hasattr(module, "__all__"):
+                continue
+            for name in module.__all__:
+                subpackage = getattr(module, name)
+                if not isinstance(subpackage, Package):
+                    continue
+                subpackage.import_modules()

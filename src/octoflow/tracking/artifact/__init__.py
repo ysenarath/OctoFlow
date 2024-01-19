@@ -16,14 +16,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from octoflow.core.artifact import handler
-from octoflow.core.artifact.handler import (
+from octoflow.tracking.artifact import handler
+from octoflow.tracking.artifact.handler import (
     ArtifactHandler,
     get_handler_type,
     get_handler_type_by_object,
     list_handler_types,
 )
-from octoflow.core.base import Base
+from octoflow.tracking.base import Base
 
 __all__ = [
     "Artifact",

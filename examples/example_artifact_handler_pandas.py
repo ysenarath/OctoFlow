@@ -1,6 +1,6 @@
 import pandas as pd
 
-from octoflow.core.artifact import handler
+from octoflow.tracking.artifact import handler
 
 handler_types = handler.list_handler_types()
 

@@ -1,13 +1,18 @@
 from octoflow.logging import get_logger
-from octoflow.plugins import artifacts
+from octoflow.plugins.package import Package
 
 logger = get_logger(__name__)
 
 __all__ = [
-    "artifacts",
-    "import_modules",
+    "package",
 ]
 
-
-def import_modules():
-    artifacts.package.import_modules()
+package = Package(
+    "plugins",
+    modules=[
+        {
+            "name": ".tracking",
+            "package": "octoflow.plugins",
+        },
+    ],
+)

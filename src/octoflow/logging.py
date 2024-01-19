@@ -1,13 +1,10 @@
 import logging
 from typing import Optional, Sequence, Union
 
-CONSOLE_HANDLER = "console"
-
-PACKAGE_NAME = next(iter(__name__.split(".")))
-DEFAULT_LOGGING_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-DEFAULT_LOGGING_HANDLERS = {
-    CONSOLE_HANDLER,
-}
+__all__ = [
+    "get_logger",
+    "LoggingFactory",
+]
 
 
 class LoggingFactory:
@@ -15,12 +12,14 @@ class LoggingFactory:
         self,
         name: Optional[str] = None,
         level: Union[int, str] = logging.INFO,
-        formatter: str = DEFAULT_LOGGING_FORMAT,
-        handlers: Sequence[str] = DEFAULT_LOGGING_HANDLERS,
+        formatter: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers: Sequence[str] = "console",
     ) -> None:
         logger = logging.getLogger(name)
         logger.setLevel(level)
-        if CONSOLE_HANDLER in handlers:
+        if isinstance(handlers, str):
+            handlers = (handlers,)
+        if "console" in handlers:
             stream_handler = logging.StreamHandler()
             stream_handler.setLevel(logging.DEBUG)
             if not isinstance(formatter, logging.Formatter):
@@ -36,4 +35,4 @@ class LoggingFactory:
         return logging.getLogger(name)
 
 
-get_logger = LoggingFactory(PACKAGE_NAME)
+get_logger = LoggingFactory(name=next(iter(__name__.split("."))))

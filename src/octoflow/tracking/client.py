@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from octoflow.core.base import SessionMixin, create_engine
-from octoflow.core.experiment import Experiment
-from octoflow.core.run import Run
+from octoflow.tracking.base import SessionMixin, create_engine
+from octoflow.tracking.experiment import Experiment
+from octoflow.tracking.run import Run
 
 
 class Client(SessionMixin):

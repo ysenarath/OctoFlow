@@ -1,7 +1,7 @@
 import pickle  # noqa: S403
 from typing import Any
 
-from octoflow.core.artifact.handler import ArtifactHandler
+from octoflow.tracking.artifact.handler import ArtifactHandler
 
 __all__ = [
     "PickleArtifactHandler",

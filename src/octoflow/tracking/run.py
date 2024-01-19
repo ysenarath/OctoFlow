@@ -20,11 +20,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, aliased, mapped_column
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from octoflow.core import artifact, value_utils
-from octoflow.core.artifact import Artifact
-from octoflow.core.base import Base
-from octoflow.core.value import Value, ValueType
-from octoflow.core.variable import Variable, VariableType
+from octoflow.tracking import artifact, value_utils
+from octoflow.tracking.artifact import Artifact
+from octoflow.tracking.base import Base
+from octoflow.tracking.value import Value, ValueType
+from octoflow.tracking.variable import Variable, VariableType
 
 __all__ = [
     "Run",

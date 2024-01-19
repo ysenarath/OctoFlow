@@ -7,7 +7,7 @@ import weakref
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Type, Union
 
-from octoflow.utils.mutation import MutableDict
+from octoflow.utils.collections import MutableDict
 
 _handler_types: Dict[str, Type[ArtifactHandler]] = {}
 
