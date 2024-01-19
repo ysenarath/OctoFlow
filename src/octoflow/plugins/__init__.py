@@ -1,7 +1,4 @@
-from octoflow.logging import get_logger
 from octoflow.plugins.package import Package
-
-logger = get_logger(__name__)
 
 __all__ = [
     "package",

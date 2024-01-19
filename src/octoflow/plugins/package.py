@@ -1,9 +1,5 @@
 import importlib
 
-from octoflow.logging import get_logger
-
-logger = get_logger(__name__)
-
 
 class Package:
     def __init__(self, name: str, modules: list):
