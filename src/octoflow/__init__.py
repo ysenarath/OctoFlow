@@ -1,6 +1,15 @@
-from octoflow import logging, plugins
+from typing import Optional
+
+from octoflow import logging
 from octoflow.config import Config
+from octoflow.core.plugins import Package
 from octoflow.tracking import Client, Experiment, Run, Value
+
+default_plugins_package: Optional[Package]
+try:
+    from octoflow_plugins import package as default_plugins_package  # type: ignore
+except ImportError:
+    default_plugins_package = None
 
 __version__ = "0.0.10"
 
@@ -14,7 +23,9 @@ __all__ = [
     "logging",
 ]
 
-plugins.package.import_modules()
+
+if default_plugins_package is not None:
+    default_plugins_package.import_modules()
 
 config = Config({
     "resources": {
