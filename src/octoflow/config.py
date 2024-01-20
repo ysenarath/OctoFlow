@@ -1,36 +1,15 @@
 from __future__ import annotations
 
 import functools
-import importlib
 import inspect
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Dict, Iterator, Optional, Union
+from typing import Any, Iterator, Optional, Union
+
+from octoflow.utils.objects import create_object
 
 __all__ = [
     "Config",
 ]
-
-
-def construct(
-    cls,
-    params: Optional[Dict[str, Any]] = None,
-    partial: bool = False,
-):
-    if isinstance(cls, str):
-        module, name = cls.rsplit(".", 1)
-        module = importlib.import_module(name=module)
-        cls = getattr(module, name)
-    try:
-        if params is None:
-            params = {}
-        if not isinstance(params, dict):
-            msg = f"params must be a dict, found {type(params).__name__}"
-            raise TypeError(msg)
-        if partial:
-            return functools.partial(cls, **params)
-        return cls(**params)
-    except Exception as ex:
-        raise ex
 
 
 class ConfigWrapper:
@@ -87,13 +66,15 @@ class FrozenConfig(Mapping):
         value = self._data[key]
         if isinstance(value, dict):
             if "$type" in value:
+                # value is an object
                 params = dict(value.items())
                 cls = params.pop("$type")
                 partial = params.pop("$partial", False)
-                return construct(
+                kwargs = FrozenConfig(params).to_dict()
+                return create_object(
                     cls,
-                    params=FrozenConfig(params).to_dict(),
-                    partial=partial,
+                    partial,
+                    **kwargs,
                 )
             else:
                 return FrozenConfig(value)
