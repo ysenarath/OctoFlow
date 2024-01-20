@@ -12,6 +12,25 @@ def get_logger(
     formatter: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers: Sequence[str] = "console",
 ) -> logging.Logger:
+    """
+    Get a logger with the given name and level.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name of the logger.
+    level : int or str, optional
+        Logging level.
+    formatter : str, optional
+        Formatter string.
+    handlers : Sequence[str], optional
+        Sequence of handlers to use.
+
+    Returns
+    -------
+    logging.Logger
+        Logger instance.
+    """
     logger = logging.getLogger(name)
     logger.setLevel(level)
     if isinstance(handlers, str):
