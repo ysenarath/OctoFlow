@@ -24,6 +24,7 @@ classifiers = [ # ToDo: Modify according to your needs!
 ]
 # direct dependencies of this package, installed when users `pip install octoflow` later.
 dependencies = [
+    "octoflow-plugins",
     # "typer",
     # "numpy",
     # "matplotlib",
