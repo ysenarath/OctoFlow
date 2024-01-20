@@ -11,7 +11,7 @@ try:
 except ImportError:
     default_plugins_package = None
 
-__version__ = "0.0.10"
+__version__ = "0.0.11"
 
 __all__ = [
     "Client",
