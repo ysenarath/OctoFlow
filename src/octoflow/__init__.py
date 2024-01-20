@@ -5,12 +5,6 @@ from octoflow.config import Config
 from octoflow.core.plugins import Package
 from octoflow.tracking import Client, Experiment, Run, Value
 
-default_plugins_package: Optional[Package]
-try:
-    from octoflow_plugins import package as default_plugins_package  # type: ignore
-except ImportError:
-    default_plugins_package = None
-
 __version__ = "0.0.11"
 
 __all__ = [
@@ -22,10 +16,6 @@ __all__ = [
     "LoggingFactory",
     "logging",
 ]
-
-
-if default_plugins_package is not None:
-    default_plugins_package.import_modules()
 
 config = Config({
     "resources": {
@@ -43,3 +33,14 @@ logger = logging.get_logger(
     level=config.logging.level,
     formatter=config.logging.format,
 )
+
+
+default_plugins_package: Optional[Package]
+
+try:
+    from octoflow_plugins import package as default_plugins_package  # type: ignore
+except ImportError:
+    default_plugins_package = None
+
+if default_plugins_package is not None:
+    default_plugins_package.import_modules()
