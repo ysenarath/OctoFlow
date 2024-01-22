@@ -1,6 +1,8 @@
 import logging
 from typing import Optional, Sequence, Union
 
+from octoflow.config import config
+
 __all__ = [
     "get_logger",
 ]
@@ -8,9 +10,9 @@ __all__ = [
 
 def get_logger(
     name: Optional[str] = None,
-    level: Union[int, str] = logging.INFO,
-    formatter: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers: Sequence[str] = "console",
+    level: Union[int, str, None] = None,
+    handlers: Optional[Sequence[str]] = None,
+    formatter: Optional[str] = None,
 ) -> logging.Logger:
     """
     Get a logger with the given name and level.
@@ -32,8 +34,11 @@ def get_logger(
         Logger instance.
     """
     logger = logging.getLogger(name)
-    logger.setLevel(level)
-    if isinstance(handlers, str):
+    if level is not None:
+        logger.setLevel(level)
+    if handlers is None:
+        handlers = ()
+    elif isinstance(handlers, str):
         handlers = (handlers,)
     if "console" in handlers:
         stream_handler = logging.StreamHandler()
@@ -46,3 +51,11 @@ def get_logger(
         # Add the handlers to the logger
         logger.addHandler(stream_handler)
     return logger
+
+
+logger = get_logger(
+    name=next(iter(__package__.split("."))),  # octoflow logger
+    level=config.logging.level,
+    handlers="console",
+    formatter=config.logging.format,
+)
