@@ -84,7 +84,7 @@ plugins:
         paths:
           - src
         options:
-          docstring_style: google
+          docstring_style: numpy
           docstring_options:
             ignore_init_summary: yes
           merge_init_into_class: yes
