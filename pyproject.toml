@@ -223,44 +223,44 @@ convention = "numpy" # Accepts: "google", "numpy", or "pep257".
 # no-cov = "cov --no-cov {args}"
 # debug = "cov --no-cov -s --pdb --pdbcls=IPython.core.debugger:Pdb {args}"
 
-# # Docs environment
-# [tool.hatch.envs.docs]
-# dependencies = [
-#     "mkdocs~=1.4.0",
-#     "mkdocs-material~=8.5.6",
-#     # Plugins
-#     "mkdocs-include-markdown-plugin",
-#     "mkdocs-gen-files",
-#     "mkdocs-literate-nav",
-#     "mkdocs-minify-plugin~=0.5.0",
-#     "mkdocs-section-index",
-#     "mkdocs-git-revision-date-localized-plugin~=1.1.0",
-#     "mkdocstrings[python]",
-#     "mkdocs-redirects~=1.1.0",
-#     "mkdocs-glightbox~=0.3.0",
-#     # https://github.com/jimporter/mike/issues/82#issuecomment-1172913929
-#     "mike @ https://github.com/jimporter/mike/archive/392d57b8bb9d14bcedf2451a0dc302709f8055eb.zip",
-#     # Extensions
-#     "pymdown-extensions~=9.6.0",
-#     # Necessary for syntax highlighting in code blocks
-#     "pygments~=2.13.0",
-#     # Validation
-#     # https://github.com/linkchecker/linkchecker/pull/669#issuecomment-1267236287
-#     "linkchecker @ git+https://github.com/linkchecker/linkchecker.git@d9265bb71c2054bf57b8c5734a4825d62505c779",
-# ]
-# [tool.hatch.envs.docs.env-vars]
-# SOURCE_DATE_EPOCH = "1580601600"
-# PYTHONUNBUFFERED = "1"
-# MKDOCS_CONFIG = "mkdocs.yml"
+# Docs environment
+[tool.hatch.envs.docs]
+dependencies = [
+    "mkdocs~=1.5.0",
+    "mkdocs-material~=9.5.0",
+    # Plugins
+    "mkdocs-include-markdown-plugin",
+    "mkdocs-gen-files",
+    "mkdocs-literate-nav",
+    "mkdocs-minify-plugin~=0.5.0",
+    "mkdocs-section-index",
+    "mkdocs-git-revision-date-localized-plugin~=1.1.0",
+    "mkdocstrings[python]",
+    "mkdocs-redirects~=1.1.0",
+    "mkdocs-glightbox~=0.3.0",
+    # https://github.com/jimporter/mike/issues/82#issuecomment-1172913929
+    "mike @ https://github.com/jimporter/mike/archive/392d57b8bb9d14bcedf2451a0dc302709f8055eb.zip",
+    # Extensions
+    "pymdown-extensions~=10.7.0",
+    # Necessary for syntax highlighting in code blocks
+    "pygments~=2.17.0",
+    # Validation
+    # https://github.com/linkchecker/linkchecker/pull/669#issuecomment-1267236287
+    "linkchecker @ git+https://github.com/linkchecker/linkchecker.git@d9265bb71c2054bf57b8c5734a4825d62505c779",
+]
+[tool.hatch.envs.docs.env-vars]
+SOURCE_DATE_EPOCH = "1580601600"
+PYTHONUNBUFFERED = "1"
+MKDOCS_CONFIG = "mkdocs.yml"
 
-# [tool.hatch.envs.docs.scripts]
-# build = "mkdocs build --config-file {env:MKDOCS_CONFIG} --clean --strict {args}"
-# serve = "mkdocs serve --config-file {env:MKDOCS_CONFIG} --dev-addr localhost:8000 {args}"
-# ci-build = "mike deploy --config-file {env:MKDOCS_CONFIG} --update-aliases {args}"
-# # --ignore-url=None since the SUMMARY.md file leaves a <toc>None</toc> in sitemap.xml
-# validate = "linkchecker --config .linkcheckerrc --ignore-url=/reference --ignore-url=None site"
-# # https://github.com/linkchecker/linkchecker/issues/678
-# build-check = ["build", "validate"]
+[tool.hatch.envs.docs.scripts]
+build = "mkdocs build --config-file {env:MKDOCS_CONFIG} --clean --strict {args}"
+serve = "mkdocs serve --config-file {env:MKDOCS_CONFIG} --dev-addr localhost:8000 {args}"
+ci-build = "mike deploy --config-file {env:MKDOCS_CONFIG} --update-aliases {args}"
+# --ignore-url=None since the SUMMARY.md file leaves a <toc>None</toc> in sitemap.xml
+validate = "linkchecker --config .linkcheckerrc --ignore-url=/reference --ignore-url=None site"
+# https://github.com/linkchecker/linkchecker/issues/678
+build-check = ["build", "validate"]
 
 # # Lint environment
 # [tool.hatch.envs.lint]
