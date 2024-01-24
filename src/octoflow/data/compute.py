@@ -6,13 +6,11 @@ import pyarrow.dataset as ds
 from pyarrow.dataset import field as pyarrow_field
 from pyarrow.dataset import scalar as pyarrow_scalar
 
-from octoflow.data.base import PyArrowWrapper
+from octoflow.data.base import BaseExpression
 
 __all__ = [
     "Expression",
 ]
-
-BaseExpression = PyArrowWrapper[ds.Expression]
 
 
 class Expression(BaseExpression):
@@ -77,4 +75,4 @@ class Expression(BaseExpression):
         return hash(self._wrapped)
 
     def __repr__(self) -> str:
-        return f"Expression({self._wrapped})"
+        return f"Expression({self._wrapped!r})"
