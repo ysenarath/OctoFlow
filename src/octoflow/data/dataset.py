@@ -85,6 +85,24 @@ class Dataset(DatasetType):
         loader_args: Optional[Tuple[Any, ...]] = None,
         loader_kwargs: Optional[Dict[str, Any]] = None,
     ):
+        """
+        Create a new dataset.
+
+        Parameters
+        ----------
+        data_or_loader : list of dict, dict of list, DataFrameType, BaseDatasetLoader
+            The data to load into the dataset.
+        format : str
+            The format of the dataset.
+        path : str, Path, None
+            The path to the dataset.
+        cache_dir : str, Path, None
+            The directory to use for caching.
+        loader_args : tuple, None
+            The arguments to pass to the loader function if provided as the first argument.
+        loader_kwargs : dict, None
+            The keyword arguments to pass to the loader function if provided as the first argument.
+        """
         if isinstance(data_or_loader, BaseDatasetLoader):
             if loader_args is None:
                 loader_args = ()
@@ -135,7 +153,21 @@ class Dataset(DatasetType):
         path: Union[Path, str],
         format: str = DEFAULT_FORMAT,
     ) -> Dataset:
-        # create instance using __new__
+        """
+        Load an existing dataset.
+
+        Parameters
+        ----------
+        path : str, Path
+            The path to the dataset.
+        format : str
+            The format of the dataset.
+
+        Returns
+        -------
+        Dataset
+            The loaded dataset.
+        """
         inst = cls.__new__(cls)
         inst._wrapped = read_dataset(path, format=format)
         inst._path = path
@@ -144,10 +176,26 @@ class Dataset(DatasetType):
 
     @property
     def path(self) -> Path:
+        """
+        The path to the dataset.
+
+        Returns
+        -------
+        Path
+            The path to the dataset.
+        """
         return self._path
 
     @property
     def format(self) -> str:
+        """
+        The format of the dataset.
+
+        Returns
+        -------
+        str
+            The format of the dataset.
+        """
         return self._format
 
     @property
@@ -155,9 +203,25 @@ class Dataset(DatasetType):
         return self._wrapped.format.default_extname
 
     def count_rows(self) -> int:
+        """
+        Count the number of rows in the dataset.
+
+        Returns
+        -------
+        int
+            The number of rows in the dataset.
+        """
         return self._wrapped.count_rows()
 
     def __len__(self) -> int:
+        """
+        Get the number of rows in the dataset.
+
+        Returns
+        -------
+        int
+            The number of rows in the dataset.
+        """
         return self.count_rows()
 
     def head(
@@ -167,6 +231,25 @@ class Dataset(DatasetType):
         filter: Expression = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> DataFrameType:
+        """
+        Get the first rows of the dataset as a pandas DataFrame.
+
+        Parameters
+        ----------
+        num_rows : int
+            The number of rows to get.
+        columns : str, list of str, None
+            Names of columns to get. If None, all columns are returned.
+        filter : Expression
+            The filter expression.
+        batch_size : int
+            Number of rows to get at a time.
+
+        Returns
+        -------
+        DataFrame
+            A pandas DataFrame containing the first rows of the dataset.
+        """
         filter = filter.to_pyarrow() if filter else None
         if isinstance(columns, str):
             columns = [columns]
@@ -229,6 +312,7 @@ class Dataset(DatasetType):
         return table.to_pandas()
 
     def __getitem__(self, indices: Union[int, slice, List[int]]) -> Dataset:
+        """Get rows from the dataset."""
         return self.take(indices)
 
     def map(
@@ -236,6 +320,21 @@ class Dataset(DatasetType):
         func: Any,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> Dataset:
+        """
+        Map a function over the dataset.
+
+        Parameters
+        ----------
+        func : Any
+            The function to map over the dataset.
+        batch_size : int
+            Number of rows to map at a time.
+
+        Returns
+        -------
+        Dataset
+            A new dataset containing the mapped rows.
+        """
         batch_iter = (
             pa.RecordBatch.from_pandas(
                 batch.to_pandas().apply(
@@ -261,6 +360,19 @@ class Dataset(DatasetType):
         return type(self).load_dataset(path, format=self.format)
 
     def filter(self, expression: Expression = None) -> Dataset:
+        """
+        Filter the dataset.
+
+        Parameters
+        ----------
+        expression : Expression
+            The filter expression.
+
+        Returns
+        -------
+        Dataset
+            A new dataset containing only the rows that match the filter expression.
+        """
         if expression is None:
             return self
         pyarrow_expression = expression.to_pyarrow()
@@ -276,13 +388,46 @@ class Dataset(DatasetType):
         return type(self).load_dataset(path, format=self.format)
 
     def cleanup(self):
+        """
+        Delete the resources allocated for this dataset.
+
+        Returns
+        -------
+        None
+        """
         if not self.path.exists():
             return
         shutil.rmtree(self.path)
 
     def __enter__(self) -> Dataset:
+        """
+        Context manager entry point.
+
+        Returns
+        -------
+        Dataset
+            The dataset.
+        """
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Context manager exit point.
+
+        This will delete the resources allocated for this dataset.
+
+        Parameters
+        ----------
+        exc_type : Exception
+            The exception type.
+        exc_value : Exception
+            The exception value.
+        traceback : Traceback
+            The traceback.
+
+        Returns
+        -------
+        None
+        """
         with contextlib.suppress(Exception):
             self.cleanup()
