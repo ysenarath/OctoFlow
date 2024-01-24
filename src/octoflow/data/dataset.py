@@ -9,12 +9,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 import numpy as np
 import pyarrow as pa
-import pyarrow.dataset as ds
 from numpy.typing import ArrayLike
 
 from octoflow import logging
-from octoflow.data.base import BaseDatasetLoader, PyArrowWrapper
+from octoflow.data.base import BaseDataset, BaseDatasetLoader
 from octoflow.data.compute import Expression
+from octoflow.data.constants import DEFAULT_BATCH_SIZE, DEFAULT_FORMAT
 from octoflow.data.utils import create_table, generate_unique_path, read_dataset, write_dataset
 from octoflow.utils import hashutils
 
@@ -27,14 +27,10 @@ except ImportError:
 
 logger = logging.get_logger(__name__)
 
-DatasetType = PyArrowWrapper[ds.Dataset]
 SourceType = Union[str, List[str], Union[Path, List[Path]], "Dataset", List["Dataset"]]
 
-DEFAULT_BATCH_SIZE = 131_072
-DEFAULT_FORMAT = "arrow"
 
-
-def mapfunc(func):
+def _map_func_wrapper(func):
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         output = func(*args, **kwargs)
@@ -45,7 +41,7 @@ def mapfunc(func):
     return wrapped
 
 
-class Dataset(DatasetType):
+class Dataset(BaseDataset):
     @overload
     def __init__(
         self,
@@ -147,33 +143,6 @@ class Dataset(DatasetType):
         self._path = path
         self._format = format
 
-    @classmethod
-    def load_dataset(
-        cls,
-        path: Union[Path, str],
-        format: str = DEFAULT_FORMAT,
-    ) -> Dataset:
-        """
-        Load an existing dataset.
-
-        Parameters
-        ----------
-        path : str, Path
-            The path to the dataset.
-        format : str
-            The format of the dataset.
-
-        Returns
-        -------
-        Dataset
-            The loaded dataset.
-        """
-        inst = cls.__new__(cls)
-        inst._wrapped = read_dataset(path, format=format)
-        inst._path = path
-        inst._format = format
-        return inst
-
     @property
     def path(self) -> Path:
         """
@@ -212,17 +181,6 @@ class Dataset(DatasetType):
             The number of rows in the dataset.
         """
         return self._wrapped.count_rows()
-
-    def __len__(self) -> int:
-        """
-        Get the number of rows in the dataset.
-
-        Returns
-        -------
-        int
-            The number of rows in the dataset.
-        """
-        return self.count_rows()
 
     def head(
         self,
@@ -311,10 +269,6 @@ class Dataset(DatasetType):
         )
         return table.to_pandas()
 
-    def __getitem__(self, indices: Union[int, slice, List[int]]) -> Dataset:
-        """Get rows from the dataset."""
-        return self.take(indices)
-
     def map(
         self,
         func: Any,
@@ -338,7 +292,7 @@ class Dataset(DatasetType):
         batch_iter = (
             pa.RecordBatch.from_pandas(
                 batch.to_pandas().apply(
-                    mapfunc(func),
+                    _map_func_wrapper(func),
                     axis=1,
                 ),
             )
@@ -389,7 +343,7 @@ class Dataset(DatasetType):
 
     def cleanup(self):
         """
-        Delete the resources allocated for this dataset.
+        Delete the directory containing the dataset.
 
         Returns
         -------
@@ -398,6 +352,24 @@ class Dataset(DatasetType):
         if not self.path.exists():
             return
         shutil.rmtree(self.path)
+
+    def __len__(self) -> int:
+        """
+        Get the number of rows in the dataset.
+
+        Returns
+        -------
+        int
+            The number of rows in the dataset.
+        """
+        return self.count_rows()
+
+    def __getitem__(
+        self,
+        indices: Union[int, slice, List[int]],
+    ) -> Dataset:
+        """Get rows from the dataset."""
+        return self.take(indices)
 
     def __enter__(self) -> Dataset:
         """
@@ -431,3 +403,30 @@ class Dataset(DatasetType):
         """
         with contextlib.suppress(Exception):
             self.cleanup()
+
+    @classmethod
+    def load_dataset(
+        cls,
+        path: Union[Path, str],
+        format: str = DEFAULT_FORMAT,
+    ) -> Dataset:
+        """
+        Load an existing dataset.
+
+        Parameters
+        ----------
+        path : str, Path
+            The path to the dataset.
+        format : str
+            The format of the dataset.
+
+        Returns
+        -------
+        Dataset
+            The loaded dataset.
+        """
+        inst = cls.__new__(cls)
+        inst._wrapped = read_dataset(path, format=format)
+        inst._path = path
+        inst._format = format
+        return inst

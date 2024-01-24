@@ -4,6 +4,13 @@ from typing import Any, Callable, Generic, TypeVar
 import pyarrow.dataset as ds
 from typing_extensions import ParamSpec
 
+__all__ = [
+    "PyArrowWrapper",
+    "BaseExpression",
+    "BaseDataset",
+    "BaseDatasetLoader",
+]
+
 ArrowType = TypeVar("ArrowType")
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -18,6 +25,8 @@ class PyArrowWrapper(Generic[ArrowType]):
 
 
 BaseExpression = PyArrowWrapper[ds.Expression]
+
+BaseDataset = PyArrowWrapper[ds.Dataset]
 
 
 class BaseDatasetLoader(Generic[P, R]):
