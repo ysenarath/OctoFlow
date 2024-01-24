@@ -87,8 +87,11 @@ plugins:
           docstring_style: numpy
           docstring_options:
             ignore_init_summary: yes
-          merge_init_into_class: yes
-          show_submodules: no
+          group_by_category: true
+          show_source: false
+          members_order: source
+          merge_init_into_class: no
+          show_submodules: yes
           # Headings
           show_root_heading: true
           show_root_full_path: false
@@ -97,7 +100,11 @@ plugins:
           # Signatures/annotations
           show_signature_annotations: true
           # Other
-          show_bases: false
+          show_bases: true
+          filters:
+            - "!__all__"
+            - "!logger"
+            - "!^_[^_]"
 
 markdown_extensions:
   # Built-in
