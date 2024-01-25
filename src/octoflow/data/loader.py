@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import functools
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional, TypeVar, Union, overload
 
 from typing_extensions import ParamSpec
 
 from octoflow.data.base import BaseDatasetLoader
 from octoflow.data.dataset import DEFAULT_FORMAT, Dataset
+
+__all__ = [
+    "dataloader",
+    "load_dataset",
+]
+
 
 loaders: Dict[str, DatasetLoader] = {}
 
@@ -157,14 +164,15 @@ def dataloader(
         path_arg=path_arg,
         wraps=wraps,
     )
-    for ext in loader.extensions:
-        loaders[ext] = loader
+    loaders[loader.name] = loader
     return func
 
 
 def load_dataset(
+    __loader: str,
     __path: Optional[str],
-    __format: str = DEFAULT_FORMAT,
+    __dataset_format: str = DEFAULT_FORMAT,
+    __dataset_path: Union[Path, str, None] = None,
     /,
     *args,
     **kwargs,
@@ -174,10 +182,14 @@ def load_dataset(
 
     Parameters
     ----------
+    __loader : str
+        The name of the loader.
     __path : Optional[str]
-        The path to the dataset.
-    __format : str, optional
+        The path to the data (to be passed to the loader).
+    __dataset_format : str, optional
         The format of the dataset, by default DEFAULT_FORMAT.
+    __dataset_path : Union[Path, str, None], optional
+        The path that the dataset will be stored.
     *args : tuple
         The arguments to pass to the loader.
     **kwargs : dict
@@ -188,10 +200,10 @@ def load_dataset(
     Dataset
         The loaded dataset.
     """
-    ext = "." + __path.split(".")[-1]
-    loader = loaders.get(ext)
+    loader = loaders.get(__loader)
     if loader is None:
-        msg = f"unknown extension '{ext}'"
+        # notify the user that the loader is not found
+        msg = f"loader '{__loader}' not found"
         raise ValueError(msg)
     if loader.path_arg is not None:
         kwargs[loader.path_arg] = __path
@@ -200,7 +212,8 @@ def load_dataset(
         args = (__path, *args)
     return Dataset(
         loader,
-        __format,
+        __dataset_format,
+        path=__dataset_path,
         loader_args=args,
         loader_kwargs=kwargs,
     )
