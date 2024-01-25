@@ -11,9 +11,9 @@ from typing_extensions import Protocol, dataclass_transform, runtime_checkable  
 
 from octoflow import logging
 
-sessionmaker_cv = ContextVar("sessionmaker_cv", default=None)
-session_cv = ContextVar("session_cv", default=None)
-persist_on_init_cv = ContextVar("persist_on_init_cv", default=True)
+_sessionmaker_cv = ContextVar("sessionmaker_cv", default=None)
+_session_cv = ContextVar("session_cv", default=None)
+_persist_on_init_cv = ContextVar("persist_on_init_cv", default=True)
 
 logger = logging.get_logger(__name__)
 
@@ -24,11 +24,11 @@ class SessionError(ValueError): ...
 @contextmanager
 def persist_on_init(state: Optional[bool] = None) -> Generator[bool, None, None]:
     if state is None:
-        yield persist_on_init_cv.get()
+        yield _persist_on_init_cv.get()
     else:
-        token = persist_on_init_cv.set(state)
+        token = _persist_on_init_cv.set(state)
         yield state
-        persist_on_init_cv.reset(token)
+        _persist_on_init_cv.reset(token)
 
 
 @contextmanager
@@ -63,10 +63,10 @@ def build_session(
         session_factory = engine_or_session_factory
     # Set the session factory as the global session maker for this coroutine
     if session_factory is None:
-        session_factory = sessionmaker_cv.get()
-    sessionmaker_token = sessionmaker_cv.set(session_factory)
+        session_factory = _sessionmaker_cv.get()
+    sessionmaker_token = _sessionmaker_cv.set(session_factory)
     # Retrieve the current session from the context
-    session: Session = session_cv.get()
+    session: Session = _session_cv.get()
     if session is None:
         # No existing session found in the context
         if session_factory is None:
@@ -74,14 +74,14 @@ def build_session(
             raise ValueError(msg)
         # Create a new session and set it in the context
         with session_factory() as session:
-            session_token = session_cv.set(session)
+            session_token = _session_cv.set(session)
             yield session  # Yield the session
-            session_cv.reset(session_token)
+            _session_cv.reset(session_token)
     else:
         # Use the existing session from the context
         yield session
     # Reset the global session maker in the context
-    sessionmaker_cv.reset(sessionmaker_token)
+    _sessionmaker_cv.reset(sessionmaker_token)
 
 
 @runtime_checkable
@@ -161,7 +161,7 @@ class SessionMixin:
 class Base(DeclarativeBase, SessionMixin):
     def __init__(self, *args, **kwargs):
         super(Base, self).__init__()
-        self.session_factory: sessionmaker = sessionmaker_cv.get()
+        self.session_factory: sessionmaker = _sessionmaker_cv.get()
         if self.session_factory is None:
             msg = "no session object in the context, and session_factory is None"
             raise ValueError(msg)
@@ -184,7 +184,7 @@ class Base(DeclarativeBase, SessionMixin):
     def init_on_load(self):
         # when object is constructed via sqlalchemy.orm
         # get a ref to the session maker
-        self.session_factory: sessionmaker = sessionmaker_cv.get()
+        self.session_factory: sessionmaker = _sessionmaker_cv.get()
 
     def create(self):
         with self.session() as session:
@@ -235,7 +235,7 @@ class Base(DeclarativeBase, SessionMixin):
     def from_dict(cls, data: dict):
         primary_keys = iter(column.name for column in cls.__table__.columns if column.primary_key)
         kwargs = {key: data[key] for key in primary_keys}
-        session_factory: sessionmaker = sessionmaker_cv.get()
+        session_factory: sessionmaker = _sessionmaker_cv.get()
         with build_session(session_factory) as session:
             # merge with the current session
             self = session.query(cls).filter_by(**kwargs).first()
