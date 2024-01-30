@@ -293,7 +293,11 @@ class Run(Base):
             handler_type = artifact.get_handler_type_by_object(value)
         elif isinstance(handler_type, str):
             # validate if a handler for type exists
-            handler_type = artifact.get_handler_type(handler_type)
+            try:
+                handler_type = artifact.get_handler_type(handler_type)
+            except ValueError as e:
+                msg = str(e.args[0]) + ", please specify an appropriate handler type manually"
+                raise ValueError(msg) from e
         with self.session():
             a = Artifact(
                 run_id=self.id,

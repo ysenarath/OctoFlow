@@ -21,9 +21,16 @@ def get_handler_type(name: str) -> Type[ArtifactHandler]:
 
 
 def get_handler_type_by_object(obj: Any) -> Type[ArtifactHandler]:
-    for handler in _handler_types.values():
-        if handler.can_handle(obj):
-            return handler
+    handler = None
+    for handler_type in _handler_types.values():
+        if not handler_type.can_handle(obj):
+            continue
+        if handler is not None:
+            msg = f"multiple handlers found for '{type(obj).__name__}'"
+            raise ValueError(msg)
+        handler = handler_type
+    if handler is not None:
+        return handler
     # if we get here, we didn't find an appropriate handler for the object
     msg = f"'{type(obj).__name__}' has no handler"
     raise ValueError(msg)
