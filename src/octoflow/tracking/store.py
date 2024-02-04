@@ -228,7 +228,7 @@ class LocalFileSystemStore(TrackingStore):
         while True:
             value_path = f"{expr_id}/runs/{run_id}/values/{path}-{value_id}/value.json"
             try:
-                mapper[value_path] = json.dumps(value.to_dict(exclude="run")).encode()
+                mapper[value_path] = json.dumps(value.to_dict(exclude=("run", "step"))).encode()
                 value.id = value_id
                 break
             except KeyError:
