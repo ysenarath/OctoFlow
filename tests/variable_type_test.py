@@ -1,6 +1,6 @@
 import unittest
 
-from octoflow.tracking import variable
+from octoflow.tracking_db import variable
 
 
 class TestVariableType(unittest.TestCase):

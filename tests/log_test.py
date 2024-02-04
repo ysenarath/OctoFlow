@@ -1,6 +1,6 @@
 import unittest
 
-from octoflow.tracking import Client
+from octoflow.tracking_db import Client
 
 EXPERIMENT_DESCRIPTION = "This is a test experiment"
 
