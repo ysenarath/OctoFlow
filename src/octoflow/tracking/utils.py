@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping
 
+__all__ = [
+    "flatten",
+    "validate_slug",
+]
 
-def flatten(
-    data: Dict[str, Any],
-    parent_key: str = "",
-    separator: str = ".",
-) -> dict[str, Any]:
+
+def flatten(data: Dict[str, Any], parent_key: str = "", separator: str = ".") -> dict[str, Any]:
     """
     Flatten a nested dictionary.
 
@@ -36,3 +37,9 @@ def flatten(
         else:
             items.append((new_key, value))
     return dict(items)
+
+
+def validate_slug(s: str) -> bool:
+    if s.startswith("."):
+        return False
+    return all(c.isalnum() or (c in ".-_") for c in s)

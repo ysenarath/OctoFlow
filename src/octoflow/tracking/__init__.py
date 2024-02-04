@@ -11,3 +11,5 @@ __all__ = [
     "Run",
     "Value",
 ]
+
+Base.update_forward_refs(**globals())

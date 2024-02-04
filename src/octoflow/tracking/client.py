@@ -135,3 +135,14 @@ class TrackingClient(Base):
             msg = f"run with id '{id}' does not exist"
             raise ValueError(msg) from None
         return run
+
+    def delete_experiment(self, expr: Experiment) -> None:
+        """
+        Delete an experiment.
+
+        Parameters
+        ----------
+        expr : Experiment
+            Experiment object.
+        """
+        self.store.delete_experiment(expr)

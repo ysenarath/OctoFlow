@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Dict, Generator, Hashable, List, Mapping, Optional, Union
@@ -87,6 +88,9 @@ class TrackingStore:
             setattr(obj, key, self.bind(value))
         return obj
 
+    def delete_experiment(self, expr: Experiment) -> None:
+        raise NotImplementedError
+
 
 class LocalFileSystemMap(MutableMappingType[str, bytearray]):
     def __init__(self, path: str) -> None:
@@ -96,6 +100,8 @@ class LocalFileSystemMap(MutableMappingType[str, bytearray]):
     def path_to(self, suffix: Union[str, tuple, list]) -> Path:
         if isinstance(suffix, str):
             suffix = (suffix,)
+        # make sure suffixes are strings, use map
+        suffix = list(map(str, suffix))
         return self.path / os.path.join(*suffix)
 
     def __contains__(self, key: str) -> bool:
@@ -116,7 +122,11 @@ class LocalFileSystemMap(MutableMappingType[str, bytearray]):
             f.write(value)
 
     def __delitem__(self, key: str) -> None:
-        (self.path / key).unlink()
+        path = self.path_to(key)
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
 
     def __len__(self) -> int:
         return len(list(self.path.rglob("*")))
@@ -139,6 +149,14 @@ class LocalFileSystemStore(TrackingStore):
         d = expr.to_dict()
         mapper[expr_path] = json.dumps(d).encode()
         return self.bind(expr)
+
+    def delete_experiment(self, expr: Experiment) -> None:
+        mapper = LocalFileSystemMap(self.resource_uri)
+        expr_path = f"{expr.id}/experiment.json"
+        if expr_path not in mapper:
+            msg = f"experiment with id '{expr.id}' does not exist"
+            raise ValueError(msg)
+        del mapper[expr.id]
 
     def get_experiment(self, id: str) -> Experiment:
         mapper = LocalFileSystemMap(self.resource_uri)
@@ -228,8 +246,8 @@ class LocalFileSystemStore(TrackingStore):
         while True:
             value_path = f"{expr_id}/runs/{run_id}/values/{path}-{value_id}/value.json"
             try:
-                mapper[value_path] = json.dumps(value.to_dict(exclude=("run", "step"))).encode()
                 value.id = value_id
+                mapper[value_path] = json.dumps(value.to_dict(exclude=("run", "step"))).encode()
                 break
             except KeyError:
                 value_id += 1

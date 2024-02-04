@@ -1,30 +1,31 @@
 from __future__ import annotations
 
-import hashlib
+import base64
 from dataclasses import field
 from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional, Union
 
-import octoflow as of
-from octoflow.tracking import value_utils
+from octoflow.tracking import utils
 from octoflow.tracking.base import Base
 from octoflow.tracking.value import Value, ValueType
 from octoflow.typing import Property
 
 if TYPE_CHECKING:
     from octoflow.tracking.experiment import Experiment
+else:
+    Experiment = "Experiment"
 
 
 def get_run_id(expr: Union[Experiment, str]) -> str:
     if isinstance(expr, str):
-        return hashlib.sha256(expr.encode()).hexdigest()
+        return base64.urlsafe_b64encode(expr.encode("utf-8")).decode("utf-8")
     if not hasattr(expr, "_id") or expr._id is None:
         expr._id = get_run_id(expr.name)
     return expr._id
 
 
 class Run(Base):
-    experiment: of.tracking.experiment.Experiment
+    experiment: Experiment
     name: str
     description: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
@@ -48,7 +49,7 @@ class Run(Base):
         step: Optional[Value] = None,
         prefix: Optional[str] = None,
     ) -> List[Value]:
-        for key, value in value_utils.flatten(values).items():
+        for key, value in utils.flatten(values).items():
             key = f"{prefix}.{key}" if prefix else key
             self.log_param(
                 key=key,
@@ -74,7 +75,7 @@ class Run(Base):
         step: Optional[Value] = None,
         prefix: Optional[str] = None,
     ) -> List[Value]:
-        for key, value in value_utils.flatten(values).items():
+        for key, value in utils.flatten(values).items():
             key = f"{prefix}.{key}" if prefix else key
             self.log_metric(
                 key=key,

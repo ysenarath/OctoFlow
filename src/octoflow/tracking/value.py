@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Union
 
-import octoflow as of
 from octoflow.tracking.base import Base
 
 if TYPE_CHECKING:
@@ -13,7 +12,7 @@ VariableType = Literal["unknown", "parameter", "metric"]
 
 
 class Value(Base):
-    run: of.tracking.run.Run
+    run: Run
     key: str
     value: ValueType
     step: Optional[Value] = None
