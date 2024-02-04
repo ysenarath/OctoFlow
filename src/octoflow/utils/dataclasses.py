@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from types import FunctionType
 from typing import (
     Any,
     ClassVar,
@@ -12,15 +11,12 @@ from typing import (
     Literal,
     Mapping,
     Optional,
-    Self,
     Set,
     Tuple,
-    Type,
     Union,
-    dataclass_transform,
 )
 
-from typing_extensions import get_args, get_origin, get_type_hints
+from typing_extensions import Self, dataclass_transform, get_args, get_origin, get_type_hints
 
 from octoflow.typing import Property
 
