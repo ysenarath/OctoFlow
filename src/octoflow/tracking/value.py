@@ -13,7 +13,7 @@ VariableType = Literal["unknown", "parameter", "metric"]
 
 
 class Value(Base):
-    run: of.tracking_fs.run.Run
+    run: of.tracking.run.Run
     key: str
     value: ValueType
     step: Optional[Value] = None

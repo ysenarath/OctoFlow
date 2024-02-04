@@ -24,7 +24,7 @@ def get_run_id(expr: Union[Experiment, str]) -> str:
 
 
 class Run(Base):
-    experiment: of.tracking_fs.experiment.Experiment
+    experiment: of.tracking.experiment.Experiment
     name: str
     description: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.now)
