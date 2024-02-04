@@ -47,15 +47,8 @@ class Experiment(Base):
         )
         return self.store.create_run(run)
 
-    def search_runs(
-        self,
-        name: Optional[str] = None,
-        page: int = 1,
-        per_page: Optional[int] = 10,
-    ) -> List[Run]:
-        return self.store.search_runs(
-            expr=self,
-            name=name,
-            page=page,
-            per_page=per_page,
-        )
+    def search_runs(self, name: Optional[str] = None) -> List[Run]:
+        return self.store.search_runs(expr=self, name=name)
+
+    def delete_run(self, run: Run) -> None:
+        self.store.delete_run(run)
