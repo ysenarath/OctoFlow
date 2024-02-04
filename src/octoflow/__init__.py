@@ -3,12 +3,12 @@ from typing import Optional
 from octoflow import logging
 from octoflow.config import Config
 from octoflow.plugin import Package
-from octoflow.tracking import Client, Experiment, Run, Value
+from octoflow.tracking import Experiment, Run, TrackingClient, Value
 
 __version__ = "0.0.15"
 
 __all__ = [
-    "Client",
+    "TrackingClient",
     "Experiment",
     "Run",
     "Value",

@@ -1,46 +1,21 @@
-"""Value model.
-
-This module contains the value model.
-"""
-
 from __future__ import annotations
 
-import json
-from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Union
 
-from sqlalchemy import (
-    JSON,
-    DateTime,
-    ForeignKey,
-    Integer,
-)
-from sqlalchemy.orm import Mapped, mapped_column
-
+import octoflow as of
 from octoflow.tracking.base import Base
 
+if TYPE_CHECKING:
+    from octoflow.tracking.run import Run
+
 ValueType = Union[None, float, int, str, bool, List["ValueType"], Dict[str, "ValueType"]]
+VariableType = Literal["unknown", "parameter", "metric"]
 
 
 class Value(Base):
-    """Value model."""
-
-    __tablename__ = "value"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_id: Mapped[int] = mapped_column(Integer, ForeignKey("run.id", ondelete="CASCADE"))
-    variable_id: Mapped[int] = mapped_column(Integer, ForeignKey("variable.id", ondelete="CASCADE"))
-    value: Mapped[ValueType] = mapped_column(JSON, nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    step_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("value.id", ondelete="CASCADE"), nullable=True)
-
-    def __repr__(self) -> str:
-        """Representation of the value.
-
-        Returns:
-            str: Representation of the value.
-        """
-        value = json.dumps(self.value)
-        if self.step_id:
-            return f"Value({value}, step_id={self.step_id}, run_id={self.run_id}, variable_id={self.variable_id})"
-        return f"Value({value}, run_id={self.run_id}, variable_id={self.variable_id})"
+    run: of.tracking_fs.run.Run
+    key: str
+    value: ValueType
+    step: Optional[Value] = None
+    type: VariableType = "unknown"
+    id: Optional[int] = None

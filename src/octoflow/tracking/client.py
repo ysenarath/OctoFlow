@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from octoflow.tracking.base import SessionMixin, create_engine
+from octoflow.tracking.base import Base
 from octoflow.tracking.experiment import Experiment
 from octoflow.tracking.run import Run
+from octoflow.tracking.store import TrackingStore
 
 
-class Client(SessionMixin):
-    def __init__(self, tracking_uri: Optional[str] = None) -> None:
+class TrackingClient(Base):
+    def __init__(self, store: TrackingStore) -> None:
         """
         Client for interacting with the database.
 
@@ -17,9 +18,8 @@ class Client(SessionMixin):
         tracking_uri : str, optional
             Database URI, by default None.
         """
-        # if tracking_uri is None -> defaults to 'sqlite:///:memory:'
-        self.tracking_uri = tracking_uri
-        self.engine = create_engine(tracking_uri)
+        super().__init__()
+        self.store = store
 
     def create_experiment(
         self,
@@ -45,19 +45,21 @@ class Client(SessionMixin):
         Experiment
             Experiment object.
         """
-        with self.session():
+        try:
             expr = self.get_experiment_by_name(name)
-            if expr is not None:
-                if return_if_exist:
-                    return expr
-                msg = f"experiment with name '{name}' already exists"
-                raise ValueError(msg)
-            expr = Experiment(
-                name=name,
-                description=description,
-                artifact_uri=artifact_uri,
-            )
-        return expr
+        except ValueError:
+            expr = None
+        if expr is not None:
+            if return_if_exist:
+                return expr
+            msg = f"experiment with name '{name}' already exists"
+            raise ValueError(msg)
+        expr = Experiment(
+            name=name,
+            description=description,
+            artifact_uri=artifact_uri,
+        )
+        return self.store.create_experiment(expr)
 
     def get_experiment_by_name(self, name: str) -> Experiment:
         """
@@ -73,9 +75,7 @@ class Client(SessionMixin):
         Experiment
             Experiment object.
         """
-        with self.session() as session:
-            expr = session.query(Experiment).filter_by(name=name).first()
-        return expr
+        return self.store.get_experiment_by_name(name)
 
     def list_experiments(self) -> List[Experiment]:
         """
@@ -86,11 +86,9 @@ class Client(SessionMixin):
         List[Experiment]
             List of experiments.
         """
-        with self.session() as session:
-            exprs = session.query(Experiment).all()
-        return exprs
+        return self.store.list_all_experiments()
 
-    def get_experiment(self, id: int) -> Experiment:
+    def get_experiment(self, id: str) -> Experiment:
         """
         Get an experiment by id.
 
@@ -107,12 +105,11 @@ class Client(SessionMixin):
         if id is None:
             msg = "experiment id cannot be None"
             raise ValueError(msg)
-        with self.session() as session:
-            try:
-                expr = session.query(Experiment).get(id)
-            except ValueError:
-                msg = f"experiment with id '{id}' does not exist"
-                raise ValueError(msg) from None
+        try:
+            expr = self.store.get_experiment(id)
+        except ValueError:
+            msg = f"experiment with id '{id}' does not exist"
+            raise ValueError(msg) from None
         return expr
 
     def get_run(self, id: int) -> Run:
@@ -132,10 +129,9 @@ class Client(SessionMixin):
         if id is None:
             msg = "run id cannot be None"
             raise ValueError(msg)
-        with self.session() as session:
-            try:
-                run = session.query(Run).get(id)
-            except ValueError:
-                msg = f"run with id '{id}' does not exist"
-                raise ValueError(msg) from None
+        try:
+            run = self.store.get_run(id)
+        except ValueError:
+            msg = f"run with id '{id}' does not exist"
+            raise ValueError(msg) from None
         return run
