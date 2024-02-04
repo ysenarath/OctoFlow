@@ -15,18 +15,20 @@ def main():
     except ValueError as e:
         print(e)
     expr = client.create_experiment(expr_name)
-    run = expr.start_run()
+    run = expr.start_run("abc-abcd-1234-1234")
     for step in range(1, 5):
         step_val = run.log_param("step", step)
         for epoch in range(1, 5):
             epoch_val = run.log_param("epoch", epoch, step=step_val)
             run.log_metric("loss", 1 / epoch, step=epoch_val)
         run.log_metric("loss", 1 / step, step=step_val)
-    step_val = run.log_params({
+    step_val = run.log_metrics({
         "f1-score": 0.9,
         "accuracy": 0.8,
         "validation": {"f1-score": 0.9, "accuracy": 0.8},
     })
+    logs = run.get_logs()
+    print(logs)
 
 
 if __name__ == "__main__":
