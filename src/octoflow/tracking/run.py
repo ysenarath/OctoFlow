@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from dataclasses import field
 from datetime import datetime
-from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, ClassVar, Dict, List, Optional, TypedDict, Union
 
 from octoflow.tracking import utils
 from octoflow.tracking.base import Base
@@ -14,6 +14,17 @@ if TYPE_CHECKING:
     from octoflow.tracking.experiment import Experiment
 else:
     Experiment = "Experiment"
+
+EMPTY_DICT = {}
+
+
+class FilterByType(TypedDict):
+    parameter: bool
+    metric: bool
+
+
+class FilterExpression(TypedDict):
+    type: FilterByType
 
 
 def get_run_id(expr: Union[Experiment, str]) -> str:
@@ -40,8 +51,7 @@ class Run(Base):
     ) -> Value:
         """Log a value."""
         value = Value(run=self, key=key, value=value, type="parameter", step=step)
-        self.store.log_value(value)
-        return value
+        return self.store.log_value(value)
 
     def log_params(
         self,
@@ -49,13 +59,16 @@ class Run(Base):
         step: Optional[Value] = None,
         prefix: Optional[str] = None,
     ) -> List[Value]:
+        log_vals = []
         for key, value in utils.flatten(values).items():
             key = f"{prefix}.{key}" if prefix else key
-            self.log_param(
+            log_val = self.log_param(
                 key=key,
                 value=value,
                 step=step,
             )
+            log_vals.append(log_val)
+        return log_vals
 
     def log_metric(
         self,
@@ -66,8 +79,7 @@ class Run(Base):
     ) -> Value:
         """Log a value."""
         value = Value(run=self, key=key, value=value, type="metric", step=step)
-        self.store.log_value(value)
-        return value
+        return self.store.log_value(value)
 
     def log_metrics(
         self,
@@ -75,10 +87,16 @@ class Run(Base):
         step: Optional[Value] = None,
         prefix: Optional[str] = None,
     ) -> List[Value]:
+        log_vals = []
         for key, value in utils.flatten(values).items():
             key = f"{prefix}.{key}" if prefix else key
-            self.log_metric(
+            log_val = self.log_metric(
                 key=key,
                 value=value,
                 step=step,
             )
+            log_vals.append(log_val)
+        return log_vals
+
+    def get_logs(self, filters: FilterExpression = EMPTY_DICT) -> dict:
+        return self.store.get_logs(run=self, filters=filters)
