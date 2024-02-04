@@ -22,6 +22,11 @@ def main():
             epoch_val = run.log_param("epoch", epoch, step=step_val)
             run.log_metric("loss", 1 / epoch, step=epoch_val)
         run.log_metric("loss", 1 / step, step=step_val)
+    step_val = run.log_params({
+        "f1-score": 0.9,
+        "accuracy": 0.8,
+        "validation": {"f1-score": 0.9, "accuracy": 0.8},
+    })
 
 
 if __name__ == "__main__":
