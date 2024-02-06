@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, Generator, Hashable, List, Mapping, Optional, Union
+from typing import Any, Dict, Generator, Hashable, List, Mapping, Optional, Tuple, TypeVar, Union
 from typing import MutableMapping as MutableMappingType
 
 from octoflow.tracking.base import Base
@@ -13,40 +14,31 @@ from octoflow.tracking.experiment import Experiment, get_experiment_id
 from octoflow.tracking.run import EMPTY_DICT, FilterExpression, Run, get_run_id
 from octoflow.tracking.value import Value
 
+__all__ = [
+    "TrackingStore",
+    "LocalFileSystemMap",
+]
+
+T = TypeVar("T")
+
 
 class TrackingStore:
-    def create_experiment(
-        self,
-        expr: Experiment,
-    ) -> Experiment:
+    def create_experiment(self, expr: Experiment) -> Experiment:
         raise NotImplementedError
 
-    def get_experiment(
-        self,
-        id: int,
-    ) -> Experiment:
+    def get_experiment(self, id: str) -> Experiment:
         raise NotImplementedError
 
-    def get_experiment_by_name(
-        self,
-        name: str,
-    ) -> Experiment:
+    def get_experiment_by_name(self, name: str) -> Experiment:
         raise NotImplementedError
 
     def list_all_experiments(self) -> List[Experiment]:
         raise NotImplementedError
 
-    def create_run(
-        self,
-        run: Run,
-    ) -> Run:
+    def create_run(self, run: Run) -> Run:
         raise NotImplementedError
 
-    def get_run(
-        self,
-        expr: Union[Experiment, str],
-        uuid: str,
-    ) -> Run:
+    def get_run(self, expr: Experiment, id: str) -> Run:
         raise NotImplementedError
 
     def search_runs(
@@ -98,26 +90,39 @@ class TrackingStore:
 
 
 class LocalFileSystemMap(MutableMappingType[str, bytearray]):
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: Union[Path, str]) -> None:
         super().__init__()
-        self.path = Path(path)
+        self.path: Path = Path(path)
 
-    def path_to(self, suffix: Union[str, tuple, list]) -> Path:
-        if isinstance(suffix, str):
-            suffix = (suffix,)
-        # make sure suffixes are strings, use map
-        suffix = list(map(str, suffix))
-        return self.path / os.path.join(*suffix)
+    @classmethod
+    def _join_path_flatten(cls, s: Union[T, Sequence[T]]) -> Tuple[T]:
+        if isinstance(s, (tuple, list)):
+            args_flat = []
+            for item in s:
+                args_flat.extend(cls._join_path_flatten(item))
+            return tuple(args_flat)
+        return (s,)
+
+    def _root_path(self, *suffix: Union[str, Path]) -> Path:
+        args = self._join_path_flatten(suffix)
+        args = list(map(str, args))
+        return self.path / os.path.join(*args)
+
+    def __truediv__(self, key: str) -> LocalFileSystemMap:
+        return LocalFileSystemMap(self._root_path(key))
+
+    def dirs(self) -> Generator[LocalFileSystemMap, None, None]:
+        yield from (LocalFileSystemMap(d) for d in self.path.iterdir() if d.is_dir())
 
     def __contains__(self, key: str) -> bool:
-        return self.path_to(key).exists()
+        return self._root_path(key).exists()
 
     def __getitem__(self, key: Union[str, tuple]) -> bytearray:
-        with open(self.path_to(key), "rb") as f:
+        with open(self._root_path(key), "rb") as f:
             return f.read()
 
     def __setitem__(self, key: str, value: bytearray) -> None:
-        wp = self.path_to(key)
+        wp = self._root_path(key)
         os.makedirs(wp.parent, exist_ok=True)
         try:
             wp.touch(exist_ok=False)
@@ -127,7 +132,7 @@ class LocalFileSystemMap(MutableMappingType[str, bytearray]):
             f.write(value)
 
     def __delitem__(self, key: str) -> None:
-        path = self.path_to(key)
+        path = self._root_path(key)
         if path.is_dir():
             shutil.rmtree(path)
         else:
@@ -141,7 +146,7 @@ class LocalFileSystemMap(MutableMappingType[str, bytearray]):
 
 
 class LocalFileSystemStore(TrackingStore):
-    def __init__(self, resource_uri: str) -> None:
+    def __init__(self, resource_uri: Union[Path, str]) -> None:
         super().__init__()
         self.resource_uri = resource_uri
 
@@ -170,11 +175,13 @@ class LocalFileSystemStore(TrackingStore):
     def list_all_experiments(self) -> List[Experiment]:
         mapper = LocalFileSystemMap(self.resource_uri)
         exprs = []
-        for key in mapper:
-            if not key.endswith("/experiment.json"):
+        for expr_dir in mapper.path.iterdir():
+            expr_data_path = expr_dir / "experiment.json"
+            if not expr_dir.is_dir() or not expr_data_path.exists():
                 continue
-            expr = Experiment.from_dict(json.loads(mapper[key]))
+            expr = Experiment.from_dict(json.loads(mapper[expr_data_path]))
             exprs.append(expr)
+        return self.bind(exprs)
 
     def delete_experiment(self, expr: Experiment) -> None:
         mapper = LocalFileSystemMap(self.resource_uri)
@@ -213,28 +220,34 @@ class LocalFileSystemStore(TrackingStore):
 
     def search_runs(
         self,
-        expr: Experiment,
+        expr: Union[Experiment, str],
         name: Optional[str] = None,
         **kwargs: Any,
     ) -> List[Run]:
-        expr_path = f"{expr.id}/experiment.json"
+        if isinstance(expr, str):
+            expr = self.get_experiment_by_name(expr)
         mapper = LocalFileSystemMap(self.resource_uri)
-        expr_dict = json.loads(mapper[expr_path])
+        expr_mapper = mapper / expr.id
+        expr_dict = json.loads(expr_mapper["experiment.json"])
         runs = []
         if name is None:
-            run_prefix = f"{expr.id}/runs/"
-            for key in mapper:
-                if key.startswith(run_prefix) and key.endswith("/run.json"):
-                    run = json.loads(mapper[key])
-                    run["experiment"] = expr_dict
-                    run = Run.from_dict(run)
-                    runs.append(run)
+            runs_mapper = expr_mapper / "runs"
+            for run_mapper in runs_mapper.dirs():
+                try:
+                    run = json.loads(run_mapper["run.json"])
+                except FileNotFoundError:
+                    continue
+                run["experiment"] = expr_dict
+                run = Run.from_dict(run)
+                runs.append(run)
         else:
             run_id = get_run_id(name)
-            run_prefix = f"{expr.id}/runs/{run_id}/"
-            for key in mapper:
-                if key.startswith(run_prefix) and key.endswith("/run.json"):
-                    run = json.loads(mapper[key])
+            run_mapper = expr_mapper / "runs" / run_id
+            if "run.json" in run_mapper:
+                run = None
+                with contextlib.suppress(FileNotFoundError):
+                    run = json.loads(mapper["run.json"])
+                if run is not None:
                     run["experiment"] = expr_dict
                     run = Run.from_dict(run)
                     runs.append(run)
