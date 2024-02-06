@@ -4,8 +4,11 @@ from typing import List, Optional
 
 from octoflow.tracking.base import Base
 from octoflow.tracking.experiment import Experiment
-from octoflow.tracking.run import Run
 from octoflow.tracking.store import TrackingStore
+
+__all__ = [
+    "TrackingClient",
+]
 
 
 class TrackingClient(Base):
@@ -94,7 +97,7 @@ class TrackingClient(Base):
 
         Parameters
         ----------
-        id : int
+        id : str
             Experiment id.
 
         Returns
@@ -111,30 +114,6 @@ class TrackingClient(Base):
             msg = f"experiment with id '{id}' does not exist"
             raise ValueError(msg) from None
         return expr
-
-    def get_run(self, id: int) -> Run:
-        """
-        Get a run by id.
-
-        Parameters
-        ----------
-        id : int
-            Run id.
-
-        Returns
-        -------
-        Run
-            Run object.
-        """
-        if id is None:
-            msg = "run id cannot be None"
-            raise ValueError(msg)
-        try:
-            run = self.store.get_run(id)
-        except ValueError:
-            msg = f"run with id '{id}' does not exist"
-            raise ValueError(msg) from None
-        return run
 
     def delete_experiment(self, expr: Experiment) -> None:
         """

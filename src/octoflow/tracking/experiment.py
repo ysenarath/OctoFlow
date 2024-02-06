@@ -32,9 +32,7 @@ class Experiment(Base):
     id: ClassVar[Property[str]] = property(fget=get_experiment_id)
 
     def __post_init__(self) -> None:
-        if not validate_slug(self.name):
-            msg = "invalid experiment name"
-            raise ValueError(msg)
+        _ = self.id
         super().__post_init__()
 
     def start_run(self, name: Optional[str] = None, description: Optional[str] = None) -> Run:

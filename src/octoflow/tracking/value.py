@@ -23,7 +23,10 @@ class Value(Base):
     def __post_init__(self) -> None:
         # check if value type is valid
         if self.type not in {"unknown", "parameter", "metric"}:
-            msg = "invalid value type"
+            # provide a helpful error message with the valid options
+            # and the value that was provided
+            valid_options = set(Value.__annotations__["type"].__args__)
+            msg = f"invalid value type: '{self.type}', valid options are {valid_options}"
             raise ValueError(msg)
         # check name is valid
         if not validate_slug(self.key):
