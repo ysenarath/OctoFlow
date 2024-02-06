@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, Generator, Hashable, List, Mapping, Optional, Tuple, TypeVar, Union
 from typing import MutableMapping as MutableMappingType
 
+import orjson
+
 from octoflow.tracking.base import Base
 from octoflow.tracking.experiment import Experiment, get_experiment_id
 from octoflow.tracking.run import EMPTY_DICT, FilterExpression, Run, get_run_id
@@ -299,8 +301,8 @@ class LocalFileSystemStore(TrackingStore):
         value_file = f"{values_uri}/value.json"
         value_data = None
         if os.path.exists(value_file) and os.path.isfile(value_file):
-            with open(value_file, encoding="utf-8") as f:
-                value_data = json.load(f)
+            with open(value_file, "rb") as f:
+                value_data = orjson.loads(f.read())
         key_path = os.path.join(
             base_path,
             "" if value_data is None else value_data["key"],
