@@ -175,11 +175,8 @@ class LocalFileSystemStore(TrackingStore):
     def list_all_experiments(self) -> List[Experiment]:
         mapper = LocalFileSystemMap(self.resource_uri)
         exprs = []
-        for expr_dir in mapper.path.iterdir():
-            expr_data_path = expr_dir / "experiment.json"
-            if not expr_dir.is_dir() or not expr_data_path.exists():
-                continue
-            expr = Experiment.from_dict(json.loads(mapper[expr_data_path]))
+        for expr_mapper in mapper.dirs():
+            expr = Experiment.from_dict(json.loads(expr_mapper["experiment.json"]))
             exprs.append(expr)
         return self.bind(exprs)
 
