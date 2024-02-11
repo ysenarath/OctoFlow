@@ -1,35 +1,60 @@
-from octoflow.tracking.client import TrackingClient
-from octoflow.tracking.store import LocalFileSystemStore
+import shutil
+from pathlib import Path
 
+from octoflow.tracking import SQLAlchemyTrackingStore, TrackingClient
 
-def main():
-    store = LocalFileSystemStore("logs/tracking")
-    client = TrackingClient(store)
-    expr_name = "example_experiment"
-    try:
-        expr = client.get_experiment_by_name(expr_name)
-        for run in expr.search_runs():
-            print(run.experiment.name)
-        client.delete_experiment(expr)
-        print(f"Deleted experiment '{expr_name}'")
-    except ValueError as e:
-        print(e)
-    expr = client.create_experiment(expr_name)
-    run = expr.start_run("abc-abcd-1234-1234")
-    for step in range(1, 5):
-        step_val = run.log_param("step", step)
-        for epoch in range(1, 5):
-            epoch_val = run.log_param("epoch", epoch, step=step_val)
-            run.log_metric("loss", 1 / epoch, step=epoch_val)
-        run.log_metric("loss", 1 / step, step=step_val)
-    step_val = run.log_metrics({
-        "f1-score": 0.9,
-        "accuracy": 0.8,
-        "validation": {"f1-score": 0.9, "accuracy": 0.8},
-    })
-    logs = run.get_logs()
-    print(logs)
+base_dir = Path("~/Downloads/TempFiles/octoflow").expanduser()
+database_path = base_dir / "tracking.db"
 
+if base_dir.exists():
+    shutil.rmtree(base_dir)
 
-if __name__ == "__main__":
-    main()
+base_dir.mkdir(parents=True, exist_ok=True)
+
+store = SQLAlchemyTrackingStore(f"sqlite:///{database_path}")
+
+client = TrackingClient(store)
+
+# Create an experiment
+expr = client.create_experiment("test_experiment")
+
+run = expr.start_run("test_run", ruid="12")
+
+tag = run.add_tag("test_tag")
+
+tags = run.list_tags()
+
+for tag in tags:
+    run.remove_tag(tag)
+
+run.log_param("num_epochs", 10)
+
+for ll_step in range(10):
+    ll_step_val = run.log_param("ll_step", ll_step)
+    run.log_metric("loss", 0.1 * ll_step, step=ll_step_val)
+    for epoch in range(10):
+        epoch_val = run.log_param("epoch", epoch, step=ll_step_val)
+        # accuracy
+        run.log_metric("metrics.accuracy", 0.2 * epoch, step=epoch_val)
+        # additional metrics
+        run.log_metrics(
+            {
+                "precision": {
+                    "micro": 0.3 * epoch,
+                    "macro": 0.4 * epoch,
+                },
+                "recall": {
+                    "micro": 0.5 * epoch,
+                    "macro": 0.6 * epoch,
+                },
+                "f1": {
+                    "micro": 0.7 * epoch,
+                    "macro": 0.8 * epoch,
+                },
+            },
+            step=epoch_val,
+            prefix="metrics",
+        )
+    run.log_metric("loss", 0.1 * ll_step, step=ll_step_val)
+
+print(store.get_value_tree(run.id))
