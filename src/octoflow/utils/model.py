@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import Field, dataclass, field
 from typing import (
     Any,
     ClassVar,
@@ -16,15 +16,23 @@ from typing import (
     Union,
 )
 
+from sqlalchemy import Table
+from sqlalchemy.orm import registry as registry_cls
 from typing_extensions import Self, dataclass_transform, get_args, get_origin, get_type_hints
 
 from octoflow.typing import Property
 
 
-@dataclass_transform()
-class BaseModelMeta(type):
-    def __new__(cls, name, bases, attrs):
+@dataclass_transform(field_specifiers=(Field, field))
+class ModelMeta(type):
+    def __new__(cls, name, bases, attrs, **kwargs):
         cls = super().__new__(cls, name, bases, attrs)
+        table: Optional[Table] = kwargs.get("table", getattr(cls, "__table__", None))
+        if table is not None and not hasattr(cls, "__table__"):
+            cls.__table__ = table
+        registry: registry_cls = kwargs.get("registry", None)
+        if table is not None and registry is not None:
+            return registry.mapped(dataclass(cls))
         return dataclass(cls)
 
     def update_forward_refs(cls, **kwargs: Any) -> None:
@@ -36,7 +44,7 @@ class BaseModelMeta(type):
             cls.__annotations__[name] = value
 
 
-class BaseModel(metaclass=BaseModelMeta):
+class ModelBase(metaclass=ModelMeta):
     def to_dict(self, exclude: Optional[Set[str]] = None) -> dict:
         return to_dict(self, exclude=exclude)
 
@@ -45,8 +53,11 @@ class BaseModel(metaclass=BaseModelMeta):
         return from_dict(cls, data)
 
 
-def to_dict(obj: object, exclude: Optional[Set[str]] = None) -> Dict[str, Any]:
-    if isinstance(obj, BaseModel):
+def to_dict(
+    obj: object,
+    exclude: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
+    if isinstance(obj, ModelBase):
         if isinstance(exclude, str):
             exclude = {exclude}
         exclude = set() if exclude is None else set(map(str, exclude))
@@ -70,7 +81,7 @@ def to_dict(obj: object, exclude: Optional[Set[str]] = None) -> Dict[str, Any]:
     return obj
 
 
-def from_dict(cls: type, data: Dict[str, Any]) -> BaseModel:
+def from_dict(cls: type, data: Dict[str, Any]) -> ModelBase:
     origin = get_origin(cls)
     subtypes = get_args(cls)
     if origin is None:
@@ -98,7 +109,7 @@ def from_dict(cls: type, data: Dict[str, Any]) -> BaseModel:
                 continue
     if origin is None or issubclass(origin, type(None)):
         return None
-    if isinstance(origin, BaseModelMeta):
+    if isinstance(origin, ModelMeta):
         kwargs = {}
         type_hints = get_type_hints(origin)
         for name, value in data.items():
