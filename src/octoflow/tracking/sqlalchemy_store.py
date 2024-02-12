@@ -84,21 +84,6 @@ class Value(Value, SQLAlchemyModelMixin, registry=mapper_registry):
     )
 
 
-# value_constraints = (
-#     Index(
-#         "ix_run_id_variable_id",
-#         Value.run_id,
-#         Value.variable_id,
-#         case(
-#             (Value.step_id.is_(None), "<NULL>"),
-#             else_=Value.value,
-#         ),
-#         Value.step_id,
-#         unique=True,
-#     ),
-# )
-
-
 class Variable(Variable, SQLAlchemyModelMixin, registry=mapper_registry):
     __table__: ClassVar[Table] = Table(
         "variable",
