@@ -6,12 +6,19 @@ from collections import defaultdict
 from typing import Dict, Generator, Iterable, MutableMapping, MutableSequence, Optional, Set, TypeVar
 from typing import MutableSet as MutableSetType
 
+__all__ = [
+    "MutableCollection",
+    "MutableDict",
+    "MutableList",
+    "MutableSet",
+]
+
 K, V = TypeVar("K"), TypeVar("V")
 
 
 class EventTarget:
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(EventTarget, self).__init__()
         self._event_listeners: Dict[str, Set[callable]] = defaultdict(set)
 
     def add_event_listener(self, type: str, listener: callable):
