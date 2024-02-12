@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-import contextlib
 import datetime as dt
 import functools
 from contextvars import ContextVar
@@ -24,7 +23,7 @@ from octoflow.tracking.utils import value_tree
 from octoflow.utils.model import ModelBase
 
 if TYPE_CHECKING:
-    from octoflow.tracking.models import Experiment, Run, RunTag, Value, Variable
+    from octoflow.tracking.models import Experiment, JSONType, Run, RunTags, Value, Variable
 
 __all__ = [
     "TrackingStore",
@@ -33,24 +32,45 @@ __all__ = [
 
 store_cv = ContextVar("store", default=None)
 
+VariableType = Literal["param", "metric"]
+
+ValueType = Union[str, float, int, bool, None]
+
+
+class StoredModel(ModelBase):
+    def __post_init__(self):
+        store = store_cv.get()
+        if store is None:
+            msg = "unable to bind object context to a tracking store"
+            raise RuntimeError(msg)
+        self._store: TrackingStore = store
+
+    @property
+    def store(self) -> TrackingStore:
+        store = store_cv.get()
+        if store is None:
+            msg = "tracking store context is not set"
+            raise RuntimeError(msg)
+        return store
+
 
 def wrap(method):
     @functools.wraps(method)
     def wrapped(self, *args, **kwargs):
         if isinstance(self, StoredModel):
-            with self.get_store():
-                return method(self, *args, **kwargs)
+            store = self._store
         elif isinstance(self, TrackingStore):
-            with self:
-                return method(self, *args, **kwargs)
+            store = self
+        with store:
+            return method(self, *args, **kwargs)
 
     return wrapped
 
 
 class ValueMapping(TypedDict):
     key: str
-    value: Union[str, int, float, bool]
-    type: Literal["param", "metric"]
+    value: ValueType
+    type: VariableType
     step_id: Optional[int]
     timestamp: Optional[dt.datetime]
     is_step: Optional[bool]
@@ -58,8 +78,8 @@ class ValueMapping(TypedDict):
 
 class ValueTuple(NamedTuple):
     key: str
-    value: Union[str, int, float, bool, None]
-    type: Literal["param", "metric"]
+    value: ValueType
+    type: VariableType
     step_id: Optional[int] = None
     timestamp: Optional[dt.datetime] = None
     is_step: Optional[bool] = None
@@ -82,6 +102,17 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
 
     This class is used to define the interface for tracking store.
     """
+
+    def __enter__(self):
+        if not hasattr(self, "_tokens") or self._tokens is None:
+            self._tokens = []
+        self._tokens.append(store_cv.set(self))
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if not hasattr(self, "_tokens"):
+            return
+        store_cv.reset(self._tokens.pop())
 
     @abc.abstractmethod
     def create_experiment(
@@ -110,8 +141,6 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         experiment_id: int,
         name: str,
         description: Optional[str] = None,
-        *,
-        ruid: Optional[str] = None,
     ) -> Run:
         raise NotImplementedError
 
@@ -120,15 +149,23 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def add_tag(self, run_id: int, label: str) -> RunTag:
+    def set_tag(self, run_id: int, name: str, value: JSONType = None) -> RunTags:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def remove_tag(self, run_id: int, label: str):
+    def get_tag(self, run_id: int, name: str) -> JSONType:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def list_tags(self, run_id: int):
+    def get_tags(self, run_id: int) -> Dict[str, JSONType]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_tags(self, run_id: int) -> int:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def delete_tag(self, run_id: int, name: str) -> RunTags:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -139,7 +176,7 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         value: str,
         *,
         step_id: Optional[int] = None,
-        type: Optional[str] = None,
+        type: Optional[VariableType] = None,
         is_step: Optional[bool] = None,
     ) -> Value:
         raise NotImplementedError
@@ -148,8 +185,9 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         self,
         run_id: int,
         value: Union[ValueMapping, ValueTuple],
+        *,
         step_id: Optional[int] = None,
-        type: Optional[str] = None,
+        type: Optional[VariableType] = None,
     ) -> Value:
         if isinstance(value, Mapping):
             value = ValueTuple(**value)
@@ -173,10 +211,11 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         self,
         run_id: int,
         values: List[Union[ValueMapping, ValueTuple, Value]],
+        *,
         step_id: Optional[int] = None,
-        type: Optional[str] = None,
+        type: Optional[VariableType] = None,
     ) -> List[Value]:
-        return [self._log_value(run_id, value) for value in values]
+        return [self._log_value(run_id, value, step_id=step_id, type=type) for value in values]
 
     @abc.abstractmethod
     def get_values(self, run_id: int) -> List[Tuple[Variable, Value]]:
@@ -187,6 +226,8 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         nodes = {None: "__root__"}
         is_step = {}
         for var, value in values:
+            if var.type == "metric":
+                pass
             is_step[value.id] = var.is_step
             nodes[value.id] = (var.key, value.value)
         tree = {}
@@ -200,38 +241,32 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         root = tree["__root__"]
         return value_tree(root)
 
-    def __enter__(self):
-        if not hasattr(self, "_tokens") or self._tokens is None:
-            self._tokens = []
-        self._tokens.append(store_cv.set(self))
+    def import_store(self, other: TrackingStore):
+        for other_experiment in other.list_experiments():
+            try:
+                this_experiment = self.create_experiment(
+                    other_experiment.name,
+                    description=other_experiment.description,
+                    artifact_uri=other_experiment.artifact_uri,
+                )
+            except ValueError:
+                this_experiment = self.get_experiment_by_name(other_experiment.name)
+            for other_run in other.list_runs(other_experiment.id):
+                this_run = self.create_run(
+                    this_experiment.id,
+                    other_run.name,
+                    description=other_run.description,
+                )
+                value_map = {}
+                for var, other_value in other.get_values(other_run.id):
+                    step_id = None if other_value.step_id is None else value_map[other_value.step_id]
+                    this_value = self.log_value(
+                        this_run.id,
+                        var.key,
+                        other_value.value,
+                        step_id=step_id,
+                        type=var.type,
+                        is_step=var.is_step,
+                    )
+                    value_map[other_value.id] = this_value.id
         return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if not hasattr(self, "_tokens"):
-            return
-        store_cv.reset(self._tokens.pop())
-
-
-class StoredModel(ModelBase):
-    def __post_init__(self):
-        store = store_cv.get()
-        if store is None:
-            msg = "object not bound to a tracking store"
-            raise RuntimeError(msg)
-        self._store: TrackingStore = store
-
-    @property
-    def store(self) -> TrackingStore:
-        store = store_cv.get()
-        if store is None:
-            msg = "object not bound to a tracking store"
-            raise RuntimeError(msg)
-        return store
-
-    @contextlib.contextmanager
-    def get_store(self) -> TrackingStore:
-        token = store_cv.set(self._store)
-        try:
-            yield self._store
-        finally:
-            store_cv.reset(token)

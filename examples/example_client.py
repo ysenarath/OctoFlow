@@ -15,17 +15,14 @@ store = SQLAlchemyTrackingStore(f"sqlite:///{database_path}")
 
 client = TrackingClient(store)
 
-# Create an experiment
-expr = client.create_experiment("test_experiment")
+try:
+    expr = client.create_experiment("test_experiment")
+except ValueError:
+    expr = client.get_experiment_by_name("test_experiment")
 
-run = expr.start_run("test_run", ruid="12")
+run = expr.start_run("test_run")
 
-tag = run.add_tag("test_tag")
-
-tags = run.list_tags()
-
-for tag in tags:
-    run.remove_tag(tag)
+run.tags["octoflow.run.hash"] = "1234567890"
 
 run.log_param("num_epochs", 10)
 
@@ -58,3 +55,8 @@ for ll_step in range(10):
     run.log_metric("loss", 0.1 * ll_step, step=ll_step_val)
 
 print(store.get_value_tree(run.id))
+
+# add completed tag
+run.tags["octoflow.run.status"] = "completed"
+
+print(run.tags)

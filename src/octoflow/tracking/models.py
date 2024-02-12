@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import field
-from typing import List, Literal, Mapping, Optional, Union
+from typing import Any, Dict, Iterator, List, Mapping, MutableMapping, Optional, Union
 
 from octoflow.tracking import store
-from octoflow.tracking.store import StoredModel, TrackingStore
+from octoflow.tracking.store import StoredModel, TrackingStore, ValueType, VariableType
 from octoflow.tracking.utils import flatten
 
 __all__ = [
     "Experiment",
     "Run",
-    "RunTag",
     "Value",
     "Variable",
     "TrackingStore",
 ]
+
+JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
 
 
 class TrackingClient:
@@ -38,6 +39,9 @@ class TrackingClient:
     ) -> Experiment:
         return self._store.create_experiment(name, description, artifact_uri)
 
+    def get_experiment_by_name(self, name: str) -> Optional[Experiment]:
+        return self._store.get_experiment_by_name(name)
+
     def list_experiments(self):
         return self._store.list_experiments()
 
@@ -53,15 +57,45 @@ class Experiment(StoredModel):
         self,
         name: str,
         description: Optional[str] = None,
-        *,
-        ruid: Optional[str] = None,
     ) -> Run:
         return self.store.create_run(
             self.id,
             name,
             description,
-            ruid=ruid,
         )
+
+
+class TagsMapping(MutableMapping[str, JSONType]):
+    def __init__(self, run: Run) -> None:
+        self._run = run
+
+    def __getitem__(self, key: str) -> JSONType:
+        with self._run._store:
+            return self._run.store.get_tag(self._run.id, key)
+
+    def __setitem__(self, key: str, value: JSONType) -> None:
+        with self._run._store:
+            self._run.store.set_tag(self._run.id, key, value)
+
+    def __delitem__(self, key: str) -> None:
+        with self._run._store:
+            self._run.store.delete_tag(self._run.id, key)
+
+    @property
+    def data(self) -> Dict[str, JSONType]:
+        with self._run._store:
+            return self._run.store.get_tags(self._run.id)
+
+    def __iter__(self) -> Iterator[str]:
+        for key, _ in self.data.items():
+            yield key
+
+    def __len__(self) -> int:
+        with self._run._store:
+            return self._run.store.count_tags(self._run.id)
+
+    def __repr__(self) -> str:
+        return repr(self.data)
 
 
 class Run(StoredModel):
@@ -70,27 +104,18 @@ class Run(StoredModel):
     name: str
     description: Optional[str]
     created_at: Optional[dt.datetime] = None
-    ruid: Optional[str] = None
 
-    @store.wrap
-    def add_tag(self, label: str) -> RunTag:
-        return self.store.add_tag(self.id, label)
+    tags: MutableMapping[str, JSONType] = field(init=False)
 
-    @store.wrap
-    def remove_tag(self, label: Union[RunTag, str]):
-        if isinstance(label, RunTag):
-            label = label.label
-        self.store.remove_tag(self.id, label)
-
-    @store.wrap
-    def list_tags(self):
-        return self.store.list_tags(self.id)
+    def __post_init__(self):
+        super().__post_init__()
+        self.tags = TagsMapping(self)
 
     @store.wrap
     def log_param(
         self,
         key: str,
-        value: Union[str, int, float, bool],
+        value: ValueType,
         *,
         step: Union[Value, int, None] = None,
     ) -> Value:
@@ -107,7 +132,7 @@ class Run(StoredModel):
     @store.wrap
     def log_params(
         self,
-        values: Mapping[str, Union[str, int, float, bool]],
+        values: Mapping[str, ValueType],
         *,
         step: Optional[Value] = None,
         prefix: Optional[str] = None,
@@ -128,7 +153,7 @@ class Run(StoredModel):
     def log_metric(
         self,
         key: str,
-        value: Union[str, int, float, bool],
+        value: ValueType,
         *,
         step: Union[Value, int, None] = None,
     ) -> Value:
@@ -145,7 +170,7 @@ class Run(StoredModel):
     @store.wrap
     def log_metrics(
         self,
-        values: Mapping[str, Union[str, int, float, bool]],
+        values: Mapping[str, ValueType],
         *,
         step: Optional[Value] = None,
         prefix: Optional[str] = None,
@@ -167,18 +192,12 @@ class Run(StoredModel):
         return self.store.get_values(self.id)
 
 
-class RunTag(StoredModel):
-    id: int = field(init=False)
-    run_id: int
-    label: str
-
-
 class Variable(StoredModel):
     id: int = field(init=False)
     experiment_id: int
     key: str
     parent_id: Optional[int]
-    type: Optional[Literal["param", "metric"]] = None
+    type: Optional[VariableType] = None
     is_step: Optional[bool] = None
 
 
@@ -186,6 +205,18 @@ class Value(StoredModel):
     id: int = field(init=False)
     run_id: int
     variable_id: int
-    value: Union[str, float, int, bool, None]
+    value: ValueType
     timestamp: Optional[dt.datetime] = None
     step_id: Optional[int] = None
+
+
+class RunTags(StoredModel):
+    id: int = field(init=False)
+    run_id: int
+    tag_id: int
+    value: JSONType = None
+
+
+class Tag(StoredModel):
+    id: int = field(init=False)
+    name: str
