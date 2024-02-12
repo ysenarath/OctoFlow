@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import field
-from typing import Any, Dict, Iterator, List, Mapping, MutableMapping, Optional, Union
+from typing import Any, Dict, Iterator, List, Mapping, MutableMapping, Optional, Tuple, Union
 
 from octoflow.tracking import store
 from octoflow.tracking.store import StoredModel, TrackingStore, ValueType, VariableType
-from octoflow.tracking.utils import flatten
+from octoflow.tracking.utils import ValueTree, flatten
 
 __all__ = [
     "Experiment",
@@ -188,8 +188,12 @@ class Run(StoredModel):
         return self.store.log_values(self.id, input_vals)
 
     @store.wrap
-    def get_values(self) -> List[Value]:
+    def get_values(self) -> List[Tuple[Variable, Value]]:
         return self.store.get_values(self.id)
+
+    @store.wrap
+    def get_value_tree(self) -> ValueTree:
+        return self.store.get_value_tree(self.id)
 
 
 class Variable(StoredModel):
