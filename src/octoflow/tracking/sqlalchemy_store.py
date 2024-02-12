@@ -20,8 +20,11 @@ from sqlalchemy import (
     Integer,
     String,
     Table,
+    case,
     create_engine,
     desc,
+    literal,
+    literal_column,
 )
 from sqlalchemy.orm import Session, registry
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
@@ -81,6 +84,21 @@ class Value(Value, SQLAlchemyModelMixin, registry=mapper_registry):
     )
 
 
+# value_constraints = (
+#     Index(
+#         "ix_run_id_variable_id",
+#         Value.run_id,
+#         Value.variable_id,
+#         case(
+#             (Value.step_id.is_(None), "<NULL>"),
+#             else_=Value.value,
+#         ),
+#         Value.step_id,
+#         unique=True,
+#     ),
+# )
+
+
 class Variable(Variable, SQLAlchemyModelMixin, registry=mapper_registry):
     __table__: ClassVar[Table] = Table(
         "variable",
@@ -99,15 +117,10 @@ variable_constraints = (
         "ix_experiment_id_key",
         Variable.experiment_id,
         Variable.key,
-        Variable.parent_id.is_(None),
-        unique=True,
-    ),
-    Index(
-        "ix_experiment_id_key_parent_id",
-        Variable.experiment_id,
-        Variable.key,
-        Variable.parent_id,
-        Variable.parent_id.isnot(None),
+        case(
+            (Variable.parent_id.is_(None), "<NULL>"),
+            else_=Variable.parent_id,
+        ),
         unique=True,
     ),
 )
