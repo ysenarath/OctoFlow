@@ -23,8 +23,6 @@ from sqlalchemy import (
     case,
     create_engine,
     desc,
-    literal,
-    literal_column,
 )
 from sqlalchemy.orm import Session, registry
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
