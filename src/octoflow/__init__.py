@@ -5,7 +5,7 @@ from octoflow.config import Config
 from octoflow.plugin import Package
 from octoflow.tracking import Experiment, Run, TrackingClient, Value
 
-__version__ = "0.0.22"
+__version__ = "0.0.23"
 
 __all__ = [
     "TrackingClient",
