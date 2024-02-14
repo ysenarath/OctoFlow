@@ -1,6 +1,6 @@
 import os
 from collections import UserDict
-from typing import Any, Dict, Generic, Mapping, MutableMapping, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, Mapping, MutableMapping, Optional, Tuple, TypeVar, Union
 
 __all__ = [
     "flatten",
@@ -23,7 +23,8 @@ ValueTree = ValueTreeBase[ValueTreeBase]
 
 
 def value_tree(
-    root: Dict[str, Any],
+    root: Dict[int, Any],
+    nodes: Dict[int, Tuple[str, Any]],
     /,
     path="/",
 ) -> ValueTree:
@@ -31,8 +32,10 @@ def value_tree(
 
     Parameters
     ----------
-    root : Dict[str, Any]
+    root : Dict[int, Any]
         The nested dictionary.
+    nodes : Dict[int, Tuple[str, Any]]
+        The nodes.
     path : str, optional
         The path, by default "/"
 
@@ -42,7 +45,8 @@ def value_tree(
         The value tree.
     """
     tree = ValueTree()
-    for (key, value), inner in root.items():
+    for node_id, inner in root.items():
+        key, value = nodes[node_id]
         key_path = os.path.join(path, key)
         value_path = os.path.join(key_path, str(value))
         if inner is None:
@@ -56,11 +60,11 @@ def value_tree(
                 msg = f"expected 'dict' for key path '{key_path}', got '{type(temp).__name__}'"
                 raise ValueError(msg)
             temp.update({
-                value: value_tree(inner, path=value_path),
+                value: value_tree(inner, nodes, path=value_path),
             })
         else:
             tree[key] = ValueTree({
-                value: value_tree(inner, path=value_path),
+                value: value_tree(inner, nodes, path=value_path),
             })
     return tree
 

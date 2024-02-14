@@ -232,23 +232,23 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
 
     def get_value_tree(self, run_id: int) -> Dict[str, Any]:
         values = self.get_values(run_id)
-        nodes = {None: "__root__"}
+        nodes = {}
         is_step = {}
         for var, value in values:
-            if var.type == "metric":
-                pass
             is_step[value.id] = var.is_step
             nodes[value.id] = (var.key, value.value)
         tree = {}
         for _, value in values:
-            sn, vn = nodes[value.step_id], nodes[value.id]
+            sn, vn = value.step_id, value.id
+            if sn is None:
+                sn = "__root__"
             if vn not in tree:
                 tree[vn] = {} if is_step[value.id] else None
             if sn not in tree:
                 tree[sn] = {}
             tree[sn][vn] = tree[vn]
         root = tree["__root__"]
-        return value_tree(root)
+        return value_tree(root, nodes)
 
     def import_store(self, other: TrackingStore):
         for other_experiment in other.list_experiments():
