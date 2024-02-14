@@ -42,6 +42,30 @@ class TrackingClient:
     def get_experiment_by_name(self, name: str) -> Optional[Experiment]:
         return self._store.get_experiment_by_name(name)
 
+    def get_or_create_experiment(
+        self,
+        name: str,
+        *,
+        description: Optional[str] = None,
+        artifact_uri: Optional[str] = None,
+    ) -> Experiment:
+        err = None
+        try:
+            # try to create if exists - if fails then it is there
+            return self.create_experiment(
+                name,
+                description,
+                artifact_uri,
+            )
+        except ValueError as e:
+            err = e
+        try:
+            return self.get_experiment_by_name(name)
+        except ValueError as ex:
+            if err is not None:
+                raise err from ex
+            raise ex
+
     def list_experiments(self):
         return self._store.list_experiments()
 
