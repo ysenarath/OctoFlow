@@ -53,16 +53,17 @@ class Experiment(StoredModel):
     artifact_uri: Optional[str]
 
     @store.wrap
-    def start_run(
-        self,
-        name: str,
-        description: Optional[str] = None,
-    ) -> Run:
-        return self.store.create_run(
-            self.id,
-            name,
-            description,
-        )
+    def start_run(self, name: str, description: Optional[str] = None) -> Run:
+        return self.store.create_run(self.id, name, description)
+
+    @store.wrap
+    def search_runs(self, **kwargs) -> List[Run]:
+        return self.store.search_runs(self.id, **kwargs)
+
+    @store.wrap
+    def delete_run(self, run: Union[Run, int]) -> None:
+        run_id = run.id if isinstance(run, Run) else run
+        self.store.delete_run(self.id, run_id)
 
 
 class TagsMapping(MutableMapping[str, JSONType]):
