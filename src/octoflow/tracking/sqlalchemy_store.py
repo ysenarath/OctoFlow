@@ -201,7 +201,7 @@ class SQLAlchemyTrackingStore(TrackingStore):
                 session.commit()
             except Exception as e:
                 session.rollback()
-                msg = "experiment with name '{name}' already exists"
+                msg = f"experiment with name '{name}' already exists"
                 raise ValueError(msg) from e
         return expr
 
