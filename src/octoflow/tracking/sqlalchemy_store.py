@@ -262,16 +262,20 @@ class SQLAlchemyTrackingStore(TrackingStore):
                 msg = f"could not delete run with id '{run_id}'"
                 raise ValueError(msg) from e
 
-    def list_runs(self, experiment_id: int) -> List[Run]:
-        with self.session() as session:
-            runs = session.query(Run).filter(Run.experiment_id == experiment_id).order_by(Run.id).all()
-        return runs
-
-    def search_runs(self, experiment_id: int, expression: ColumnExpressionArgument[bool]) -> List[Run]:
+    def search_runs(
+        self,
+        experiment_id: int,
+        expression: Optional[ColumnExpressionArgument[bool]] = None,
+    ) -> List[Run]:
         with self.session() as session:
             stmt = session.query(Run).filter(Run.experiment_id == experiment_id)
-            runs = stmt.filter(expression).order_by(desc(Run.id)).all()
+            if expression is not None:
+                stmt = stmt.filter(expression)
+            runs = stmt.order_by(desc(Run.id)).all()
         return runs
+
+    def list_runs(self, experiment_id: int) -> List[Run]:
+        return self.list_runs(experiment_id)
 
     def set_tag(self, run_id: int, name: str, value: JSONType = None) -> RunTags:
         msg = f"could not set tag '{name}' for run with id '{run_id}'"
