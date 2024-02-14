@@ -22,7 +22,25 @@ class ValueTreeBase(
 ValueTree = ValueTreeBase[ValueTreeBase]
 
 
-def value_tree(root: Dict[str, Any], /, path="/") -> ValueTree:
+def value_tree(
+    root: Dict[str, Any],
+    /,
+    path="/",
+) -> ValueTree:
+    """Create a value tree from a nested dictionary.
+
+    Parameters
+    ----------
+    root : Dict[str, Any]
+        The nested dictionary.
+    path : str, optional
+        The path, by default "/"
+
+    Returns
+    -------
+    ValueTree
+        The value tree.
+    """
     tree = ValueTree()
     for (key, value), inner in root.items():
         key_path = os.path.join(path, key)
