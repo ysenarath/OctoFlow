@@ -11,7 +11,11 @@ if base_dir.exists():
 
 base_dir.mkdir(parents=True, exist_ok=True)
 
-store = SQLAlchemyTrackingStore(f"sqlite:///{database_path}")
+dburi = f"sqlite:///{database_path}"
+
+print(f"Database URI: {dburi}")
+
+store = SQLAlchemyTrackingStore(dburi)
 
 client = TrackingClient(store)
 
