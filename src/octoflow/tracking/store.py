@@ -146,7 +146,15 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def delete_run(self, experiment_id: int, run_id: int) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def list_runs(self, experiment_id: int) -> List[Run]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def search_runs(self, experiment_id: int, **kwargs) -> List[Run]:
         raise NotImplementedError
 
     @abc.abstractmethod
