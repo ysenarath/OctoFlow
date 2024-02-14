@@ -247,6 +247,32 @@ class SQLAlchemyTrackingStore(TrackingStore):
                 raise ValueError(msg) from e
         return run
 
+    def delete_run(self, experiment_id: int, run_id: int) -> None:
+        with self.session() as session:
+            stmt = session.query(Run).filter(Run.experiment_id == experiment_id, Run.id == run_id)
+            run = stmt.one_or_none()
+            if run is None:
+                msg = f"run with id '{run_id}' does not exist"
+                raise ValueError(msg)
+            try:
+                session.delete(run)
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                msg = f"could not delete run with id '{run_id}'"
+                raise ValueError(msg) from e
+
+    def list_runs(self, experiment_id: int) -> List[Run]:
+        with self.session() as session:
+            runs = session.query(Run).filter(Run.experiment_id == experiment_id).order_by(Run.id).all()
+        return runs
+
+    def search_runs(self, experiment_id: int, expression: ColumnExpressionArgument[bool]) -> List[Run]:
+        with self.session() as session:
+            stmt = session.query(Run).filter(Run.experiment_id == experiment_id)
+            runs = stmt.filter(expression).order_by(desc(Run.id)).all()
+        return runs
+
     def set_tag(self, run_id: int, name: str, value: JSONType = None) -> RunTags:
         msg = f"could not set tag '{name}' for run with id '{run_id}'"
         with self.session() as session:
@@ -354,21 +380,6 @@ class SQLAlchemyTrackingStore(TrackingStore):
                 session.rollback()
                 raise ValueError(msg) from e
         return run_tag
-
-    def list_runs(self, experiment_id: int) -> List[Run]:
-        with self.session() as session:
-            runs = session.query(Run).filter(Run.experiment_id == experiment_id).order_by(Run.id).all()
-        return runs
-
-    def search_runs(
-        self,
-        experiment_id: int,
-        expression: ColumnExpressionArgument[bool],
-    ) -> List[Run]:
-        with self.session() as session:
-            stmt = session.query(Run).filter(Run.experiment_id == experiment_id)
-            runs = stmt.filter(expression).order_by(desc(Run.id)).all()
-        return runs
 
     def log_value(
         self,
