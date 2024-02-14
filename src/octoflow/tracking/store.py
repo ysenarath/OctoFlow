@@ -39,6 +39,7 @@ ValueType = Union[str, float, int, bool, None]
 
 class StoredModel(ModelBase):
     def __post_init__(self):
+        super().__post_init__()
         store = store_cv.get()
         if store is None:
             msg = "unable to bind object context to a tracking store"
