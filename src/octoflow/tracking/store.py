@@ -19,7 +19,7 @@ from typing import (
     Union,
 )
 
-from octoflow.tracking.utils import value_tree
+from octoflow.tracking.utils import ValueTree, value_tree
 from octoflow.utils.model import ModelBase
 
 if TYPE_CHECKING:
@@ -230,7 +230,7 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
     def get_values(self, run_id: int) -> List[Tuple[Variable, Value]]:
         raise NotImplementedError
 
-    def get_value_tree(self, run_id: int) -> Dict[str, Any]:
+    def get_value_tree(self, run_id: int) -> ValueTree:
         values = self.get_values(run_id)
         nodes = {}
         is_step = {}
