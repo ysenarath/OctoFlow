@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-from collections import UserDict
-from typing import Any, Dict, Mapping, MutableMapping, Optional, Tuple, Union
+from collections import UserDict, deque
+from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Union
 
 __all__ = [
     "flatten",
@@ -108,33 +108,40 @@ def value_tree(
     return tree
 
 
-def merge_tree(
-    tree: ValueTree,
-    into: Optional[ValueTree] = None,
-    /,
-    length: int = 0,
-) -> Tuple[ValueTree, int]:
-    """Merge a value tree into another value tree.
+class MergedValueTree:
+    def __init__(self, /, root: MergedValueTree = None) -> None:
+        self.data = {}
+        self.length = 0 if root is None else root
+        self.root = self if root is None else root
 
-    Parameters
-    ----------
-    tree : ValueTree
-        The value tree to merge.
-    into : Optional[ValueTree], optional
-        The value tree to merge into, by default None
+    def _basic_insert(self, tree: ValueTree) -> None:
+        for key, value in tree.items():
+            if isinstance(value, ValueTree):
+                subtree = self.data.get(key, None)
+                if subtree is None:
+                    subtree = MergedValueTree(root=self.root)
+                subtree._basic_insert(value)
+                self.data[key] = subtree
+            else:
+                if key not in self.data:
+                    self.data[key] = []
+                values: List = self.data[key]
+                for _ in range(self.root.length - len(values)):
+                    values.append(None)
+                values.append(value)
+        if self.root is self:
+            # only root will update min_length
+            self.root.length = self.root.length + 1
 
-    Returns
-    -------
-    Tuple[ValueTree, int]
-        The merged value tree and the new length.
-    """
-    if into is None:
-        into = ValueTree()
-    for key, value in tree.items():
-        if isinstance(value, ValueTree):
-            into[key] = merge_tree(value, into.get(key, None), length=length)
-        elif key in into:
-            into[key] += [value]
-        else:
-            into[key] = [None for _ in range(length)] + [value]
-    return into, length + 1
+    def insert(self, tree: ValueTree) -> None:
+        self._basic_insert(tree)
+
+    def extend(self, trees: List[ValueTree]) -> None:
+        for tree in trees:
+            self._basic_insert(tree)
+
+    def __len__(self) -> int:
+        return self.root.length
+
+    def __repr__(self) -> str:
+        return f"{self.data!r}"
