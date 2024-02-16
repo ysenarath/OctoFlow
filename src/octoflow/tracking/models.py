@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterator, List, Mapping, MutableMapping, Optional,
 
 from octoflow.tracking import store
 from octoflow.tracking.store import StoredModel, TrackingStore, ValueType, VariableType
-from octoflow.tracking.utils import ValueTree, flatten
+from octoflow.tracking.utils import TreeNode, flatten
 
 __all__ = [
     "Experiment",
@@ -217,7 +217,7 @@ class Run(StoredModel):
         return self.store.get_values(self.id)
 
     @store.wrap
-    def get_value_tree(self) -> ValueTree:
+    def get_value_tree(self) -> TreeNode:
         return self.store.get_value_tree(self.id)
 
 
