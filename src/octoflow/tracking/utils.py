@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import copy
 import os
-from collections import UserDict, deque
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Union
+from collections import UserDict
+from typing import Any, Dict, Mapping, MutableMapping, Optional, Tuple, Union
 
 __all__ = [
     "flatten",
-    "ValueTree",
+    "TreeNode",
 ]
 
 
@@ -51,12 +52,10 @@ def flatten(
     return dict(items)
 
 
-ValueTreeType = MutableMapping[str, Union[str, int, float, bool, None, "ValueTree"]]
+class TreeNode(UserDict, MutableMapping[str, Union[str, int, float, bool, None, "TreeNode"]]): ...
 
 
-class ValueTree(UserDict, ValueTreeType):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+class ValueNode(UserDict, MutableMapping[Union[str, int, float, bool, None], TreeNode]): ...
 
 
 def value_tree(
@@ -64,7 +63,7 @@ def value_tree(
     nodes: Dict[int, Tuple[str, Any]],
     /,
     path="/",
-) -> ValueTree:
+) -> TreeNode:
     """Create a value tree from a nested dictionary.
 
     Parameters
@@ -81,10 +80,10 @@ def value_tree(
     ValueTree
         The value tree.
     """
-    tree = ValueTree()
+    tree = TreeNode()
     for node_id, inner in root.items():
         key, value = nodes[node_id]
-        key_path = os.path.join(path, key)
+        key_path = os.path.join(path, str(key))
         value_path = os.path.join(key_path, str(value))
         if inner is None:
             if key in tree:
@@ -92,15 +91,15 @@ def value_tree(
                 raise ValueError(msg)
             tree[key] = value
         elif key in tree:
-            temp: ValueTree = tree[key]
-            if not isinstance(temp, ValueTree):
-                msg = f"expected 'ValueTree' for key path '{key_path}', got '{type(temp).__name__}'"
+            temp = tree[key]
+            if not isinstance(temp, ValueNode):
+                msg = f"expected 'ValueNode' for key path '{key_path}', got '{type(temp).__name__}'"
                 raise ValueError(msg)
             temp.update({
                 value: value_tree(inner, nodes, path=value_path),
             })
         else:
-            subtree = ValueTree()
+            subtree = ValueNode()
             subtree.update({
                 value: value_tree(inner, nodes, path=value_path),
             })
@@ -108,40 +107,39 @@ def value_tree(
     return tree
 
 
-class MergedValueTree:
-    def __init__(self, /, root: MergedValueTree = None) -> None:
-        self.data = {}
-        self.length = 0 if root is None else root
-        self.root = self if root is None else root
-
-    def _basic_insert(self, tree: ValueTree) -> None:
-        for key, value in tree.items():
-            if isinstance(value, ValueTree):
-                subtree = self.data.get(key, None)
-                if subtree is None:
-                    subtree = MergedValueTree(root=self.root)
-                subtree._basic_insert(value)
-                self.data[key] = subtree
-            else:
-                if key not in self.data:
-                    self.data[key] = []
-                values: List = self.data[key]
-                for _ in range(self.root.length - len(values)):
-                    values.append(None)
-                values.append(value)
-        if self.root is self:
-            # only root will update min_length
-            self.root.length = self.root.length + 1
-
-    def insert(self, tree: ValueTree) -> None:
-        self._basic_insert(tree)
-
-    def extend(self, trees: List[ValueTree]) -> None:
-        for tree in trees:
-            self._basic_insert(tree)
-
-    def __len__(self) -> int:
-        return self.root.length
-
-    def __repr__(self) -> str:
-        return f"{self.data!r}"
+def index_tree(
+    tree: TreeNode,
+    /,
+    base_dict: Optional[dict] = None,
+    ancestor_keys: Optional[Tuple[str]] = None,
+) -> dict:
+    if base_dict is None:
+        base_dict = {}
+    if ancestor_keys is None:
+        ancestor_keys = ()
+    for key, value in tree.items():
+        if isinstance(value, ValueNode):
+            continue
+        pkey = (*ancestor_keys, key)
+        base_dict[pkey] = value
+    branches = {}
+    index = tuple(sorted(base_dict.keys()))
+    branches[index] = base_dict
+    for key, values in tree.items():
+        if not isinstance(values, ValueNode):
+            continue
+        pkey = (*ancestor_keys, key)
+        for value, nested in values.items():
+            base_dict_copy = copy.deepcopy(base_dict)
+            base_dict_copy[pkey] = value
+            if not isinstance(nested, TreeNode):
+                msg = f"expected 'TreeNode', got '{type(nested).__name__}'"
+                raise ValueError(msg)
+            branches.update(
+                index_tree(
+                    nested,
+                    base_dict=base_dict_copy,
+                    ancestor_keys=pkey,
+                )
+            )
+    return branches
