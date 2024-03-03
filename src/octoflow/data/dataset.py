@@ -5,7 +5,7 @@ import functools
 import itertools
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, overload
 
 import numpy as np
 import pyarrow as pa
@@ -18,12 +18,16 @@ from octoflow.data.constants import DEFAULT_BATCH_SIZE, DEFAULT_FORMAT
 from octoflow.data.utils import create_table, generate_unique_path, read_dataset, write_dataset
 from octoflow.utils import hashutils
 
-try:
+if TYPE_CHECKING:
     import pandas as pd
-    from pandas import DataFrame as DataFrameType
-except ImportError:
-    pd = None
-    DataFrameType = None
+    from pandas import DataFrame
+else:
+    try:
+        import pandas as pd
+        from pandas import DataFrame
+    except ImportError:
+        pd = None
+        DataFrame = None
 
 logger = logging.get_logger(__name__)
 
@@ -45,14 +49,14 @@ class Dataset(BaseDataset):
     @overload
     def __init__(
         self,
-        data: Union[List[dict], Dict[str, list], DataFrameType] = None,
+        data: Union[List[dict], Dict[str, list], DataFrame] = None,
         format: str = DEFAULT_FORMAT,
     ): ...
 
     @overload
     def __init__(
         self,
-        data: Union[List[dict], Dict[str, list], DataFrameType],
+        data: Union[List[dict], Dict[str, list], DataFrame],
         format: str = DEFAULT_FORMAT,
         *,
         path: Optional[Union[str, Path]] = None,
@@ -73,7 +77,7 @@ class Dataset(BaseDataset):
 
     def __init__(
         self,
-        data_or_loader: Union[List[dict], Dict[str, list], DataFrameType, BaseDatasetLoader] = None,
+        data_or_loader: Union[List[dict], Dict[str, list], DataFrame, BaseDatasetLoader] = None,
         format: str = DEFAULT_FORMAT,
         *,
         path: Optional[Union[str, Path]] = None,
@@ -86,7 +90,7 @@ class Dataset(BaseDataset):
 
         Parameters
         ----------
-        data_or_loader : list of dict, dict of list, DataFrameType, BaseDatasetLoader
+        data_or_loader : list of dict, dict of list, DataFrame, BaseDatasetLoader
             The data to load into the dataset.
         format : str
             The format of the dataset.
@@ -188,7 +192,7 @@ class Dataset(BaseDataset):
         columns: Union[str, List[str], None] = None,
         filter: Expression = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> DataFrameType:
+    ) -> DataFrame:
         """
         Get the first rows of the dataset as a pandas DataFrame.
 
@@ -224,7 +228,7 @@ class Dataset(BaseDataset):
         indices: Union[int, slice, List[int], ArrayLike] = None,
         columns: Union[str, List[str], None] = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> DataFrameType:
+    ) -> DataFrame:
         """
         Take rows from the dataset.
 
@@ -239,7 +243,7 @@ class Dataset(BaseDataset):
 
         Returns
         -------
-        DataFrameType
+        DataFrame
             A pandas DataFrame containing the taken rows.
         """
         if indices is None:
