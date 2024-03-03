@@ -112,7 +112,7 @@ def index_tree(
     /,
     base_dict: Optional[dict] = None,
     ancestor_keys: Optional[Tuple[str]] = None,
-) -> dict:
+) -> list:
     if base_dict is None:
         base_dict = {}
     if ancestor_keys is None:
@@ -122,9 +122,8 @@ def index_tree(
             continue
         pkey = (*ancestor_keys, key)
         base_dict[pkey] = value
-    branches = {}
-    index = tuple(sorted(base_dict.keys()))
-    branches[index] = base_dict
+    branches = []
+    branches.append(base_dict)
     for key, values in tree.items():
         if not isinstance(values, ValueNode):
             continue
@@ -135,11 +134,9 @@ def index_tree(
             if not isinstance(nested, TreeNode):
                 msg = f"expected 'TreeNode', got '{type(nested).__name__}'"
                 raise ValueError(msg)
-            branches.update(
-                index_tree(
-                    nested,
-                    base_dict=base_dict_copy,
-                    ancestor_keys=pkey,
-                )
+            branches += index_tree(
+                nested,
+                base_dict=base_dict_copy,
+                ancestor_keys=pkey,
             )
     return branches
