@@ -28,7 +28,9 @@ def partial_to_hashable(obj: functools.partial):
 
 def create_hashable(obj):
     if isinstance(obj, Mapping):
-        hashable_dict = tuple(sorted((k, create_hashable(v)) for k, v in obj.items()))
+        hashable_dict = tuple(
+            sorted((k, create_hashable(v)) for k, v in obj.items())
+        )
         return ("dict-like", hashable_dict)
     elif isinstance(obj, Sequence) and not isinstance(obj, str):
         hashable_list = tuple(create_hashable(v) for v in obj)

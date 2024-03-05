@@ -17,7 +17,9 @@ __all__ = [
 class ModelMeta(type):
     def __new__(cls, name, bases, attrs, **kwargs):
         cls = super().__new__(cls, name, bases, attrs)
-        table: Optional[Table] = kwargs.get("table", getattr(cls, "__table__", None))
+        table: Optional[Table] = kwargs.get(
+            "table", getattr(cls, "__table__", None)
+        )
         if table is not None and not hasattr(cls, "__table__"):
             cls.__table__ = table
         cls = dataclass(cls)

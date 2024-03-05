@@ -3,8 +3,26 @@ from __future__ import annotations
 import functools
 import weakref
 from collections import defaultdict
-from typing import Dict, Generator, Iterable, MutableMapping, MutableSequence, Optional, Set, TypeVar
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterable,
+    Mapping,
+    MutableMapping,
+    MutableSequence,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 from typing import MutableSet as MutableSetType
+
+__all__ = [
+    "flatten",
+]
+
 
 __all__ = [
     "MutableCollection",
@@ -151,3 +169,44 @@ class MutableSet(MutableCollection, MutableSetType[V]):
 
     def __repr__(self) -> str:
         return repr(self._data)
+
+
+def flatten(
+    data: Dict[str, Any],
+    *,
+    separator: str = ".",
+    parent_key: Optional[str] = None,
+) -> Dict[Union[str, Tuple[str]], Any]:
+    """
+    Flatten a nested dictionary.
+
+    Parameters
+    ----------
+    data : Dict[str, Any]
+        The nested dictionary to flatten.
+    separator : str, optional
+        The separator, by default "."
+    parent_key : Optional[str], optional
+        The parent key, by default None
+
+    Returns
+    -------
+    Dict[str | tuple[str], Any]
+        The flattened dictionary.
+    """
+    if separator is not None and parent_key is None:
+        parent_key = ""
+    items = []
+    for key, value in data.items():
+        # escape dots
+        if separator is None:
+            new_key = (parent_key, key) if parent_key is not None else key
+        else:
+            new_key = parent_key + separator + key if parent_key else key
+        if isinstance(value, Mapping):
+            items.extend(
+                flatten(value, parent_key=new_key, separator=separator).items()
+            )
+        else:
+            items.append((new_key, value))
+    return dict(items)

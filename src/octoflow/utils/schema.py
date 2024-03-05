@@ -89,7 +89,11 @@ def create_schema(
         # Union(fields, [reverse_serialize_candidates])
         nullable = any(arg is None or arg is NoneType for arg in args)
         return marshmallow_union.Union(
-            [create_schema(arg) for arg in args if arg is not None and arg is not NoneType],
+            [
+                create_schema(arg)
+                for arg in args
+                if arg is not None and arg is not NoneType
+            ],
             load_default=default,
             nullable=nullable,
         )
@@ -244,7 +248,9 @@ def create_or_get_schema_class_from_dataclass(cls: Type) -> Type[Schema]:
         origin = get_origin(type_) or type_
         if origin is ClassVar:
             continue
-        field_or_value: Union[dataclasses.Field, Any] = dataclass_fields[field_name]
+        field_or_value: Union[dataclasses.Field, Any] = dataclass_fields[
+            field_name
+        ]
         field, default = None, MISSING
         if isinstance(field_or_value, dataclasses.Field):
             field = field_or_value
