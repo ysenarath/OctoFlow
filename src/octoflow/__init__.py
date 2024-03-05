@@ -5,7 +5,7 @@ from octoflow.config import Config
 from octoflow.plugin import Package
 from octoflow.tracking import Experiment, Run, TrackingClient, Value
 
-__version__ = "0.0.30"
+__version__ = "0.0.31"
 
 __all__ = [
     "TrackingClient",
@@ -22,7 +22,7 @@ __all__ = [
 default_plugins_package: Optional[Package]
 
 try:
-    from octoflow_plugins import package as default_plugins_package  # type: ignore
+    from octoflow_plugins import package as default_plugins_package
 except ImportError:
     default_plugins_package = None
 
