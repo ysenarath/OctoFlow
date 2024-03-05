@@ -111,7 +111,7 @@ warn_unused_ignores = true
 [tool.ruff]
 extend-include = ["*.ipynb"]
 target-version = "py38"
-line-length = 120
+line-length = 79
 preview = true # preview features & checks, use with caution
 extend-select = [ # features in preview
     "W292", # missing-newline-at-end-of-file
