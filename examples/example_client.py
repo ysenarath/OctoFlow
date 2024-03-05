@@ -49,8 +49,6 @@ for ll_step in range(2):
         )
     run.log_metric("loss", 0.1 * ll_step, step=ll_step_val)
 
-print(run.get_value_tree())
-
 # add completed tag
 run.tags["octoflow.run.status"] = "completed"
 
