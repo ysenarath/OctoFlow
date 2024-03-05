@@ -1,12 +1,31 @@
 from __future__ import annotations
 
+import copy
 import datetime as dt
+import os
+from collections import UserDict, defaultdict
 from dataclasses import field
-from typing import Any, Dict, Iterator, List, Mapping, MutableMapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Self,
+    Tuple,
+    Union,
+)
 
 from octoflow.tracking import store
-from octoflow.tracking.store import StoredModel, TrackingStore, ValueType, VariableType
-from octoflow.tracking.utils import TreeNode, flatten
+from octoflow.tracking.store import (
+    StoredModel,
+    TrackingStore,
+    ValueType,
+    VariableType,
+)
+from octoflow.utils.collections import flatten
 
 __all__ = [
     "Experiment",
@@ -216,10 +235,6 @@ class Run(StoredModel):
     def get_values(self) -> List[Tuple[Variable, Value]]:
         return self.store.get_values(self.id)
 
-    @store.wrap
-    def get_value_tree(self) -> TreeNode:
-        return self.store.get_value_tree(self.id)
-
 
 class Variable(StoredModel):
     id: int = field(init=False)
@@ -249,3 +264,105 @@ class RunTags(StoredModel):
 class Tag(StoredModel):
     id: int = field(init=False)
     name: str
+
+
+class TreeNode(UserDict):
+    is_nested: bool = False
+
+    @classmethod
+    def _from_values(
+        cls,
+        root: Dict[int, Any],
+        nodes: Dict[int, Tuple[str, Any]],
+        /,
+        path="/",
+    ) -> Self:
+        tree = cls()
+        for node_id, inner in root.items():
+            key, value = nodes[node_id]
+            key_path = os.path.join(path, str(key))
+            value_path = os.path.join(key_path, str(value))
+            if inner is None:
+                if key in tree:
+                    msg = f"key path '{key_path}' already exists"
+                    raise ValueError(msg)
+                tree[key] = value
+            elif key in tree:
+                temp = tree[key]
+                if not isinstance(temp, TreeNode) or not temp.is_nested:
+                    msg = (
+                        "expected nested 'TreeNode' for key path '{key_path}'"
+                    )
+                    msg += f", got '{type(temp).__name__}'"
+                    raise ValueError(msg)
+                temp.update({
+                    value: cls._from_values(inner, nodes, path=value_path),
+                })
+            else:
+                subtree = TreeNode()
+                subtree.is_nested = True
+                subtree.update({
+                    value: cls._from_values(inner, nodes, path=value_path),
+                })
+                tree[key] = subtree
+        return tree
+
+    @classmethod
+    def from_values(cls, values: List[Tuple[Variable, Value]]) -> Self:
+        nodes = {}
+        is_step = {}
+        for var, value in values:
+            is_step[value.id] = var.is_step
+            nodes[value.id] = (var.key, value.value)
+        tree = {}
+        for _, value in values:
+            sn, vn = value.step_id, value.id
+            if sn is None:
+                sn = "__root__"
+            if vn not in tree:
+                tree[vn] = {} if is_step[value.id] else None
+            if sn not in tree:
+                tree[sn] = {}
+            tree[sn][vn] = tree[vn]
+        root = tree["__root__"]
+        return cls._from_values(root, nodes)
+
+    def _flatten(
+        self,
+        *,
+        base_dict: Optional[dict] = None,
+        ancestor_keys: Optional[Tuple[str]] = None,
+    ) -> Dict[Tuple, List]:
+        if base_dict is None:
+            base_dict = {}
+        if ancestor_keys is None:
+            ancestor_keys = ()
+        for key, value in self.items():
+            if isinstance(value, TreeNode) and value.is_nested:
+                continue  # skip nested values
+            pkey = (*ancestor_keys, key)
+            base_dict[pkey] = value
+        branches = defaultdict(list)
+        base_index = tuple(sorted(base_dict.keys()))
+        branches[base_index].append(base_dict)
+        for key, values in self.items():
+            if not isinstance(values, TreeNode) or not values.is_nested:
+                continue  # skip non-nested values
+            pkey = (*ancestor_keys, key)
+            for value, nested in values.items():
+                base_dict_copy = copy.deepcopy(base_dict)
+                base_dict_copy[pkey] = value
+                if not isinstance(nested, TreeNode):
+                    msg = f"expected 'TreeNode', got '{type(nested).__name__}'"
+                    raise ValueError(msg)
+                for branch_index, nested_branches in nested._flatten(
+                    base_dict=base_dict_copy,
+                    ancestor_keys=pkey,
+                ).items():
+                    branches[branch_index] += nested_branches
+        if len(branches) > 1:
+            branches.pop(base_index)
+        return branches
+
+    def flatten(self) -> Dict[Tuple, List]:
+        return self._flatten()

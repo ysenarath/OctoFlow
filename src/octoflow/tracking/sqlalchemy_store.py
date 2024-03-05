@@ -27,7 +27,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session, registry
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 
-from octoflow.tracking.models import Experiment, JSONType, Run, RunTags, Tag, Value, Variable
+from octoflow.tracking.models import (
+    Experiment,
+    JSONType,
+    Run,
+    RunTags,
+    Tag,
+    Value,
+    Variable,
+)
 from octoflow.tracking.store import TrackingStore, ValueType, VariableType
 
 __all__ = [
@@ -62,10 +70,17 @@ class Run(Run, SQLAlchemyModelMixin, registry=mapper_registry):
         "run",
         mapper_registry.metadata,
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("experiment_id", Integer, ForeignKey("experiment.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            "experiment_id",
+            Integer,
+            ForeignKey("experiment.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         Column("name", String(60), nullable=False),
         Column("description", String(60), nullable=True),
-        Column("created_at", DateTime, nullable=False, default=dt.datetime.utcnow),
+        Column(
+            "created_at", DateTime, nullable=False, default=dt.datetime.utcnow
+        ),
     )
 
 
@@ -74,11 +89,28 @@ class Value(Value, SQLAlchemyModelMixin, registry=mapper_registry):
         "value",
         mapper_registry.metadata,
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("run_id", Integer, ForeignKey("run.id", ondelete="CASCADE"), nullable=False),
-        Column("variable_id", Integer, ForeignKey("variable.id", ondelete="CASCADE"), nullable=True),
+        Column(
+            "run_id",
+            Integer,
+            ForeignKey("run.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        Column(
+            "variable_id",
+            Integer,
+            ForeignKey("variable.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
         Column("value", JSON, nullable=True),
-        Column("timestamp", DateTime, nullable=False, default=dt.datetime.utcnow),
-        Column("step_id", Integer, ForeignKey("value.id", ondelete="CASCADE"), nullable=True),
+        Column(
+            "timestamp", DateTime, nullable=False, default=dt.datetime.utcnow
+        ),
+        Column(
+            "step_id",
+            Integer,
+            ForeignKey("value.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
     )
 
 
@@ -87,9 +119,19 @@ class Variable(Variable, SQLAlchemyModelMixin, registry=mapper_registry):
         "variable",
         mapper_registry.metadata,
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("experiment_id", Integer, ForeignKey("experiment.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            "experiment_id",
+            Integer,
+            ForeignKey("experiment.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         Column("key", String(60), nullable=False),
-        Column("parent_id", Integer, ForeignKey("variable.id", ondelete="CASCADE"), nullable=True),
+        Column(
+            "parent_id",
+            Integer,
+            ForeignKey("variable.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
         Column("type", String(60), nullable=True),
         Column("is_step", Boolean, nullable=True, default=None),
     )
@@ -123,8 +165,18 @@ class RunTags(RunTags, SQLAlchemyModelMixin, registry=mapper_registry):
         "run_tags",
         mapper_registry.metadata,
         Column("id", Integer, primary_key=True, autoincrement=True),
-        Column("run_id", Integer, ForeignKey("run.id", ondelete="CASCADE"), nullable=False),
-        Column("tag_id", Integer, ForeignKey("tag.id", ondelete="CASCADE"), nullable=False),
+        Column(
+            "run_id",
+            Integer,
+            ForeignKey("run.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        Column(
+            "tag_id",
+            Integer,
+            ForeignKey("tag.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         Column("value", JSON, nullable=True, default=None),
         Index("ix_run_id_tag_id", "run_id", "tag_id", unique=True),
     )
@@ -147,7 +199,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
                 msg = "SQLite database with filelock does not support netloc"
                 raise ValueError(msg)
             if parsed_url.path == "/:memory:":
-                msg = "SQLite in-memory database is not supported with filelock"
+                msg = (
+                    "SQLite in-memory database is not supported with filelock"
+                )
                 raise ValueError(msg)
             lockfile = parsed_url.path + ".lock"
             url = f"sqlite:///{parsed_url.path}"
@@ -221,7 +275,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
     def get_experiment_by_name(self, name: str) -> Experiment:
         with self.session() as session:
             try:
-                stmt = session.query(Experiment).filter(Experiment.name == name)
+                stmt = session.query(Experiment).filter(
+                    Experiment.name == name
+                )
                 expr = stmt.one()
             except NoResultFound as e:
                 msg = f"experiment with name '{name}' does not exist"
@@ -231,7 +287,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
                 raise ValueError(msg) from e
         return expr
 
-    def create_run(self, experiment_id: int, name: str, description: Optional[str] = None) -> Run:
+    def create_run(
+        self, experiment_id: int, name: str, description: Optional[str] = None
+    ) -> Run:
         run = Run(
             experiment_id=experiment_id,
             name=name,
@@ -249,7 +307,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
 
     def delete_run(self, experiment_id: int, run_id: int) -> None:
         with self.session() as session:
-            stmt = session.query(Run).filter(Run.experiment_id == experiment_id, Run.id == run_id)
+            stmt = session.query(Run).filter(
+                Run.experiment_id == experiment_id, Run.id == run_id
+            )
             run = stmt.one_or_none()
             if run is None:
                 msg = f"run with id '{run_id}' does not exist"
@@ -268,7 +328,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
         expression: Optional[ColumnExpressionArgument[bool]] = None,
     ) -> List[Run]:
         with self.session() as session:
-            stmt = session.query(Run).filter(Run.experiment_id == experiment_id)
+            stmt = session.query(Run).filter(
+                Run.experiment_id == experiment_id
+            )
             if expression is not None:
                 stmt = stmt.filter(expression)
             runs = stmt.order_by(desc(Run.id)).all()
@@ -277,7 +339,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
     def list_runs(self, experiment_id: int) -> List[Run]:
         return self.list_runs(experiment_id)
 
-    def set_tag(self, run_id: int, name: str, value: JSONType = None) -> RunTags:
+    def set_tag(
+        self, run_id: int, name: str, value: JSONType = None
+    ) -> RunTags:
         msg = f"could not set tag '{name}' for run with id '{run_id}'"
         with self.session() as session:
             tag = Tag(name=name)
@@ -413,7 +477,9 @@ class SQLAlchemyTrackingStore(TrackingStore):
             with self.session() as session:
                 parent: Variable = session.query(Variable).get(parent_id)
                 if parent.is_step is None:
-                    parent.is_step = True  # update variable to be a step variable
+                    parent.is_step = (
+                        True  # update variable to be a step variable
+                    )
                     try:
                         session.commit()
                     except Exception as e:

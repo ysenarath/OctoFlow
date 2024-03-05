@@ -19,11 +19,17 @@ from typing import (
     Union,
 )
 
-from octoflow.tracking.utils import TreeNode, value_tree
 from octoflow.utils.model import ModelBase
 
 if TYPE_CHECKING:
-    from octoflow.tracking.models import Experiment, JSONType, Run, RunTags, Value, Variable
+    from octoflow.tracking.models import (
+        Experiment,
+        JSONType,
+        Run,
+        RunTags,
+        Value,
+        Variable,
+    )
 
 __all__ = [
     "TrackingStore",
@@ -158,7 +164,9 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def set_tag(self, run_id: int, name: str, value: JSONType = None) -> RunTags:
+    def set_tag(
+        self, run_id: int, name: str, value: JSONType = None
+    ) -> RunTags:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -205,7 +213,9 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         elif isinstance(value, Tuple):
             value = ValueTuple(*value)
         else:
-            msg = f"expected 'dict' or 'tuple', got '{value.__class__.__name__}'"
+            msg = (
+                f"expected 'dict' or 'tuple', got '{value.__class__.__name__}'"
+            )
             raise TypeError(msg)
         return self.log_value(
             run_id,
@@ -224,31 +234,14 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
         step_id: Optional[int] = None,
         type: Optional[VariableType] = None,
     ) -> List[Value]:
-        return [self._log_value(run_id, value, step_id=step_id, type=type) for value in values]
+        return [
+            self._log_value(run_id, value, step_id=step_id, type=type)
+            for value in values
+        ]
 
     @abc.abstractmethod
     def get_values(self, run_id: int) -> List[Tuple[Variable, Value]]:
         raise NotImplementedError
-
-    def get_value_tree(self, run_id: int) -> TreeNode:
-        values = self.get_values(run_id)
-        nodes = {}
-        is_step = {}
-        for var, value in values:
-            is_step[value.id] = var.is_step
-            nodes[value.id] = (var.key, value.value)
-        tree = {}
-        for _, value in values:
-            sn, vn = value.step_id, value.id
-            if sn is None:
-                sn = "__root__"
-            if vn not in tree:
-                tree[vn] = {} if is_step[value.id] else None
-            if sn not in tree:
-                tree[sn] = {}
-            tree[sn][vn] = tree[vn]
-        root = tree["__root__"]
-        return value_tree(root, nodes)
 
     def import_store(self, other: TrackingStore):
         for other_experiment in other.list_experiments():
@@ -259,7 +252,9 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
                     artifact_uri=other_experiment.artifact_uri,
                 )
             except ValueError:
-                this_experiment = self.get_experiment_by_name(other_experiment.name)
+                this_experiment = self.get_experiment_by_name(
+                    other_experiment.name
+                )
             for other_run in other.list_runs(other_experiment.id):
                 this_run = self.create_run(
                     this_experiment.id,
@@ -268,7 +263,11 @@ class TrackingStore(metaclass=TrackingStoreMetaClass):
                 )
                 value_map = {}
                 for var, other_value in other.get_values(other_run.id):
-                    step_id = None if other_value.step_id is None else value_map[other_value.step_id]
+                    step_id = (
+                        None
+                        if other_value.step_id is None
+                        else value_map[other_value.step_id]
+                    )
                     this_value = self.log_value(
                         this_run.id,
                         var.key,
