@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 
 from octoflow.tracking import SQLAlchemyTrackingStore, TrackingClient
+from octoflow.tracking.models import TreeNode
 
 base_dir = Path("~/Downloads/TempFiles/octoflow").expanduser()
 database_path = base_dir / "tracking.db"
@@ -53,3 +54,7 @@ for ll_step in range(2):
 run.tags["octoflow.run.status"] = "completed"
 
 print(run.tags)
+
+values = TreeNode.from_values(run.get_values())
+
+print(values.flatten())
