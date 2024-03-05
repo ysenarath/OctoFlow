@@ -13,10 +13,11 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
-    Self,
     Tuple,
     Union,
 )
+
+from typing_extensions import Self
 
 from octoflow.tracking import store
 from octoflow.tracking.store import (
