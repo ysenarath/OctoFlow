@@ -5,7 +5,16 @@ import functools
 import itertools
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    overload,
+)
 
 import numpy as np
 import pyarrow as pa
@@ -15,7 +24,12 @@ from octoflow import logging
 from octoflow.data.base import BaseDataset, BaseDatasetLoader
 from octoflow.data.compute import Expression
 from octoflow.data.constants import DEFAULT_BATCH_SIZE, DEFAULT_FORMAT
-from octoflow.data.utils import create_table, generate_unique_path, read_dataset, write_dataset
+from octoflow.data.utils import (
+    create_table,
+    generate_unique_path,
+    read_dataset,
+    write_dataset,
+)
 from octoflow.utils import hashutils
 
 if TYPE_CHECKING:
@@ -31,7 +45,9 @@ else:
 
 logger = logging.get_logger(__name__)
 
-SourceType = Union[str, List[str], Union[Path, List[Path]], "Dataset", List["Dataset"]]
+SourceType = Union[
+    str, List[str], Union[Path, List[Path]], "Dataset", List["Dataset"]
+]
 
 
 def _map_func_wrapper(func):
@@ -77,7 +93,9 @@ class Dataset(BaseDataset):
 
     def __init__(
         self,
-        data_or_loader: Union[List[dict], Dict[str, list], DataFrame, BaseDatasetLoader] = None,
+        data_or_loader: Union[
+            List[dict], Dict[str, list], DataFrame, BaseDatasetLoader
+        ] = None,
         format: str = DEFAULT_FORMAT,
         *,
         path: Optional[Union[str, Path]] = None,
@@ -137,7 +155,9 @@ class Dataset(BaseDataset):
             format=format,
         )
         if not created:
-            msg = f"existing dataset found at '{path}', loading existing file(s)"
+            msg = (
+                f"existing dataset found at '{path}', loading existing file(s)"
+            )
             logger.warning(msg)
         dataset = read_dataset(
             path,
