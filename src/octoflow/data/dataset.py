@@ -61,7 +61,7 @@ def _map_func_wrapper(func):
     return wrapped
 
 
-class Dataset(BaseDataset):
+class Dataset(BaseDataset):  # noqa: PLR0904
     @overload
     def __init__(
         self,
@@ -117,9 +117,11 @@ class Dataset(BaseDataset):
         cache_dir : str, Path, None
             The directory to use for caching.
         loader_args : tuple, None
-            The arguments to pass to the loader function if provided as the first argument.
+            The arguments to pass to the loader function if provided
+                as the first argument.
         loader_kwargs : dict, None
-            The keyword arguments to pass to the loader function if provided as the first argument.
+            The keyword arguments to pass to the loader function if provided
+                as the first argument.
         """
         if isinstance(data_or_loader, BaseDatasetLoader):
             if loader_args is None:
@@ -243,12 +245,41 @@ class Dataset(BaseDataset):
         )
         return table.to_pandas()
 
+    @overload
+    def __getitem__(self, indices: int) -> Dict[str, Any]: ...
+    @overload
+    def __getitem__(
+        self, indices: Union[slice, List[int], ArrayLike]
+    ) -> DataFrame: ...
+    def __getitem__(
+        self, indices: Union[int, slice, List[int], ArrayLike]
+    ) -> Union[DataFrame, Dict[str, Any]]:
+        """Get rows from the dataset."""
+        return self.take(indices=indices)
+
+    @overload
     def take(
         self,
+        *,
+        indices: Optional[int] = None,
+        columns: Union[str, List[str], None] = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Dict[str, Any]: ...
+    @overload
+    def take(
+        self,
+        *,
+        indices: Union[slice, List[int], ArrayLike] = None,
+        columns: Union[str, List[str], None] = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> DataFrame: ...
+    def take(
+        self,
+        *,
         indices: Union[int, slice, List[int], ArrayLike] = None,
         columns: Union[str, List[str], None] = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> DataFrame:
+    ) -> Union[DataFrame, Dict[str, Any]]:
         """
         Take rows from the dataset.
 
@@ -263,12 +294,14 @@ class Dataset(BaseDataset):
 
         Returns
         -------
-        DataFrame
+        DataFrame | dict
             A pandas DataFrame containing the taken rows.
         """
+        return_dict = False
         if indices is None:
             indices = []
         elif isinstance(indices, int):
+            return_dict = True
             indices = [indices]
         elif isinstance(indices, slice):
             step_size = indices.step
@@ -276,10 +309,13 @@ class Dataset(BaseDataset):
                 # default step size is 1
                 step_size = 1
             elif not isinstance(step_size, int):
-                msg = f"expected indices.step to be int, got '{indices.step}'"
+                msg = "expected indices.step to be int, got '{indices.step}'"
                 raise ValueError(msg)
             elif step_size < 1:
-                msg = f"expected indices.step to be greater than 0, got '{step_size}'"
+                msg = (
+                    "expected indices.step to be greater than 0, "
+                    f"got '{step_size}'"
+                )
                 raise ValueError(msg)
             start = indices.start or 0
             stop = indices.stop or self.count_rows()
@@ -291,6 +327,8 @@ class Dataset(BaseDataset):
             columns=columns,  # list of str or None
             batch_size=batch_size,  # int
         )
+        if return_dict:
+            return table.to_pandas().iloc[0].to_dict()
         return table.to_pandas()
 
     def map(
@@ -387,13 +425,6 @@ class Dataset(BaseDataset):
             The number of rows in the dataset.
         """
         return self.count_rows()
-
-    def __getitem__(
-        self,
-        indices: Union[int, slice, List[int]],
-    ) -> Dataset:
-        """Get rows from the dataset."""
-        return self.take(indices)
 
     def __enter__(self) -> Dataset:
         """
