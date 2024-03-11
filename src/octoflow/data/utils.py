@@ -50,8 +50,11 @@ def create_table(data: Any) -> pa.Table:
         return pa.Table.from_pydict(data)
     if isinstance(data, Sequence) and not isinstance(data, str):
         return pa.Table.from_pylist(list(data))
-    dtype = type(data).__name__
-    msg = f"expected data to be one of: Mapping, Sequence[Mapping] or pd.DataFrame, got '{dtype}'"
+    dtype = data.__class__.__name__
+    msg = (
+        "expected data to be one of: Mapping, Sequence[Mapping] "
+        f"or pd.DataFrame, got '{dtype}'"
+    )
     raise ValueError(msg)
 
 
