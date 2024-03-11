@@ -55,7 +55,11 @@ class ConfigWrapper:
         args = self.signature.bind_partial(*args, **kwargs)
         args = args.arguments
         args = self._update_params_from_config(args)
-        args = {k: v for k, v in args.items() if k in self.filter_keys and v is not inspect.Parameter.empty}
+        args = {
+            k: v
+            for k, v in args.items()
+            if k in self.filter_keys and v is not inspect.Parameter.empty
+        }
         args = self.signature.bind_partial(**args)
         args.apply_defaults()
         args = args.arguments
