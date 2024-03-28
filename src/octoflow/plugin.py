@@ -4,7 +4,7 @@ import importlib
 class Package:
     def __init__(self, name: str, modules: list):
         """
-        Package listing all modules to expose.
+        Initialize a package.
 
         Parameters
         ----------
