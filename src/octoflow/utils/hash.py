@@ -1,49 +1,51 @@
-import functools
-import inspect
-from collections.abc import Mapping, Sequence
-from types import BuiltinFunctionType, FunctionType
+from typing import Any, List, Union
 
-import joblib
+import dill  # noqa: S403
+import xxhash
 
 __all__ = [
     "hash",
 ]
 
 
-def partial_to_hashable(obj: functools.partial):
-    func = obj.func
-    try:
-        s = inspect.signature(func)
-        bound = s.bind_partial(*obj.args, **obj.keywords)
-        bound.apply_defaults()
-        hashable_args = create_hashable(bound.arguments)
-    except ValueError:
-        hashable_args = (
-            create_hashable(obj.args),
-            create_hashable(obj.keywords),
-        )
-    hashable_func = create_hashable(func)
-    return hashable_func, hashable_args
+class Hasher:
+    """Hasher that accepts python objets as inputs."""
+
+    dispatch = {}
+
+    def __init__(self):
+        self.m = xxhash.xxh64()
+
+    @classmethod
+    def hash_bytes(cls, value: Union[bytes, List[bytes]]) -> str:
+        value = [value] if isinstance(value, bytes) else value
+        m = xxhash.xxh64()
+        for x in value:
+            m.update(x)
+        return m.hexdigest()
+
+    @classmethod
+    def hash_default(cls, value: Any) -> str:
+        return cls.hash_bytes(dill.dumps(value))
+
+    @classmethod
+    def hash(cls, value: Any) -> str:
+        if type(value) in cls.dispatch:
+            return cls.dispatch[type(value)](cls, value)
+        else:
+            return cls.hash_default(value)
+
+    def update(self, value: Any) -> None:
+        header_for_update = f"=={type(value)}=="
+        value_for_update = self.hash(value)
+        self.m.update(header_for_update.encode("utf8"))
+        self.m.update(value_for_update.encode("utf-8"))
+
+    def hexdigest(self) -> str:
+        return self.m.hexdigest()
 
 
-def create_hashable(obj):
-    if isinstance(obj, Mapping):
-        hashable_dict = tuple(
-            sorted((k, create_hashable(v)) for k, v in obj.items())
-        )
-        return ("dict-like", hashable_dict)
-    elif isinstance(obj, Sequence) and not isinstance(obj, str):
-        hashable_list = tuple(create_hashable(v) for v in obj)
-        return ("list-like", hashable_list)
-    elif isinstance(obj, functools.partial):
-        partial = partial_to_hashable(obj)
-        return ("partial-function", partial)
-    elif isinstance(obj, (BuiltinFunctionType, FunctionType)):
-        source = inspect.getsource(obj)
-        return ("callable", source)
-    return ("object", obj)
-
-
-def hash(obj):
-    obj = create_hashable(obj)
-    return joblib.hash(obj)
+def hash(obj: Any) -> str:
+    h = Hasher()
+    h.update(obj)
+    return h.hexdigest()
