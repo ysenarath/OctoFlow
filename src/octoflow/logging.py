@@ -1,8 +1,6 @@
 import logging
 from typing import Optional, Sequence, Union
 
-from octoflow.config import config
-
 __all__ = [
     "get_logger",
 ]
@@ -51,11 +49,3 @@ def get_logger(
         # Add the handlers to the logger
         logger.addHandler(stream_handler)
     return logger
-
-
-logger = get_logger(
-    name=next(iter(__package__.split("."))),  # octoflow logger
-    level=config.logging.level,
-    handlers="console",
-    formatter=config.logging.format,
-)

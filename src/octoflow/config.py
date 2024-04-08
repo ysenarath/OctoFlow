@@ -3,7 +3,7 @@ from __future__ import annotations
 import functools
 import inspect
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Iterator, Optional, Union
+from typing import Any, Iterator, Optional, Union, overload
 
 from octoflow.utils.objects import create_object
 
@@ -13,12 +13,7 @@ __all__ = [
 
 
 class ConfigWrapper:
-    def __init__(
-        self,
-        wrapped,
-        config: Config,
-        name: Optional[str] = None,
-    ):
+    def __init__(self, wrapped, config: Config, name: Optional[str] = None):
         if name is None:
             name = getattr(wrapped, "__name__", None)
         if name is None:
@@ -156,40 +151,42 @@ class Config(FrozenConfig, MutableMapping):
     def __delitem__(self, key: str) -> None:
         del self._data[key]
 
+    @overload
     def wraps(
-        self,
-        wrapped: Union[type, callable, None] = None,
-        **kwargs,
+        self, wrapped: Union[type, callable], **kwargs
+    ) -> ConfigWrapper: ...
+
+    @overload
+    def wraps(
+        self, wrapped: Union[str, None], **kwargs
+    ) -> functools.partial: ...
+
+    def wraps(
+        self, wrapped: Union[type, callable, str, None] = None, **kwargs
     ) -> Union[ConfigWrapper, functools.partial]:
         if isinstance(wrapped, str):
-            return functools.partial(
-                self.wraps,
-                name=wrapped,
-            )
+            return functools.partial(self.wraps, name=wrapped)
         elif wrapped is None:
             # empty builder call
-            return functools.partial(
-                self.wraps,
-                **kwargs,
-            )
-        wrapped: ConfigWrapper = ConfigWrapper(
+            return functools.partial(self.wraps, **kwargs)
+        config_wrapper = ConfigWrapper(
             wrapped,
             self,
             name=kwargs.get("name", None),
         )
-        if isinstance(wrapped, type):  # if class
-            orig_init = wrapped.__init__
+        if isinstance(config_wrapper, type):  # if class
+            orig_init = config_wrapper.__init__
 
-            @functools.wraps(wrapped.__init__)
+            @functools.wraps(config_wrapper.__init__)
             def __init__(self, *args, **kwargs):  # noqa: N807
-                orig_init(self, **wrapped.get_params(*args, **kwargs))
+                orig_init(self, **config_wrapper.get_params(*args, **kwargs))
 
-            wrapped.__init__ = __init__
-            return wrapped
+            config_wrapper.__init__ = __init__
+            return config_wrapper
 
-        @functools.wraps(wrapped)
+        @functools.wraps(config_wrapper)
         def builder_wrapper(*args, **kwargs):
-            return wrapped(*args, **kwargs)
+            return config_wrapper(*args, **kwargs)
 
         return builder_wrapper
 

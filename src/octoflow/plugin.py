@@ -19,7 +19,7 @@ class Package:
             `name` indicating name of the module to import.
             `package` indicating the name of the package to import the module from.
             If not specified, the module is imported from the current package.
-        """
+        """  # noqa: E501
         self.name = name
         self.modules = modules
 
@@ -56,7 +56,10 @@ class Package:
                     package=package,
                 )
             except Exception:
-                msg = f"failed to import '{name}' from '{package}' in '{self.name}'"
+                msg = (
+                    f"failed to import '{name}' from "
+                    f"'{package}' in '{self.name}'"
+                )
                 raise ImportError(msg) from None
             if not hasattr(module, "__all__"):
                 continue

@@ -1,8 +1,7 @@
-from typing import Optional
+import contextlib
 
 from octoflow import logging
-from octoflow.config import Config
-from octoflow.plugin import Package
+from octoflow.config import Config, config
 from octoflow.tracking import Experiment, Run, TrackingClient, Value
 
 __version__ = "0.0.33"
@@ -15,16 +14,19 @@ __all__ = [
     "Config",
     "LoggingFactory",
     "logging",
+    "logger",
 ]
 
+# create the octoflow root logger
+logger = logging.get_logger(
+    name=next(iter(__package__.split("."))),  # octoflow logger
+    level=config.logging.level,
+    handlers="console",
+    formatter=config.logging.format,
+)
+
 # import default plugins if available
-
-default_plugins_package: Optional[Package]
-
-try:
+with contextlib.suppress(ImportError):
     from octoflow_plugins import package as default_plugins_package
-except ImportError:
-    default_plugins_package = None
 
-if default_plugins_package is not None:
     default_plugins_package.import_modules()
