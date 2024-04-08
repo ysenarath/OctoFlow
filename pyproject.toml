@@ -27,6 +27,10 @@ dependencies = [
     "octoflow-plugins",
     "sqlalchemy",
     "cloudpickle",
+    # for fast hashing
+    "xxhash",
+    # for pickling
+    "dill",
     # "typer",
     # "numpy",
     # "matplotlib",
