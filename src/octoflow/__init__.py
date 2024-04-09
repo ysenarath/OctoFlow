@@ -1,8 +1,9 @@
 import contextlib
 
 from octoflow import logging
-from octoflow.config import Config, config
+from octoflow._config import config
 from octoflow.tracking import Experiment, Run, TrackingClient, Value
+from octoflow.utils.config import Config
 
 __version__ = "0.0.33"
 
@@ -15,6 +16,7 @@ __all__ = [
     "LoggingFactory",
     "logging",
     "logger",
+    "config",
 ]
 
 # create the octoflow root logger

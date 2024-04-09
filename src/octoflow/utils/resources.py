@@ -1,9 +1,9 @@
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
-from octoflow.config import config
+from octoflow import config
 
 __all__ = [
     "get_resources_path",
@@ -12,8 +12,9 @@ __all__ = [
 ]
 
 
-@config.wraps(name="resources")
-def get_resources_path(path: str) -> Path:
+def get_resources_path(path: Optional[str] = None) -> Path:
+    if path is not None:
+        return config.resources.path
     return Path(path).expanduser()
 
 

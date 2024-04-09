@@ -3,13 +3,16 @@ from __future__ import annotations
 import functools
 import inspect
 from collections.abc import Mapping, MutableMapping
-from typing import Any, Iterator, Optional, Union, overload
+from dataclasses import asdict
+from typing import Any, Iterator, Optional, Type, TypeVar, Union, overload
 
 from octoflow.utils.objects import create_object
 
 __all__ = [
     "Config",
 ]
+
+T = TypeVar("T")
 
 
 class ConfigWrapper:
@@ -71,14 +74,6 @@ class FrozenConfig(Mapping):
         self._parent = None
 
     def get_root(self) -> FrozenConfig:
-        """
-        Get the root config object.
-
-        Returns
-        -------
-        FrozenConfig
-            The root config object.
-        """
         if self._parent is None:
             # this is the root
             return self
@@ -86,19 +81,6 @@ class FrozenConfig(Mapping):
         return self._parent.get_root()
 
     def set_parent(self, parent: FrozenConfig) -> FrozenConfig:
-        """
-        Set the parent config object.
-
-        Parameters
-        ----------
-        parent : FrozenConfig
-            The parent config object.
-
-        Returns
-        -------
-        FrozenConfig
-            The current config object.
-        """
         self._parent = parent
         return self
 
@@ -190,16 +172,6 @@ class Config(FrozenConfig, MutableMapping):
 
         return builder_wrapper
 
-
-config = Config({
-    "resources": {
-        "path": "~/.octoflow",
-        "cache": {
-            "path": "{root.resources.path}/cache",
-        },
-    },
-    "logging": {
-        "level": "INFO",
-        "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
-    },
-})
+    @classmethod
+    def structured(cls, dc: Type[T]) -> T:
+        return cls(**asdict(dc()))
