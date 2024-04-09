@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union
 
@@ -13,13 +14,17 @@ __all__ = [
 
 
 def get_resources_path(path: Optional[str] = None) -> Path:
-    if path is not None:
-        return config.resources.path
+    if path is None:
+        # supress error
+        with suppress(AttributeError):
+            path = config.resources.path
     return Path(path).expanduser()
 
 
-@config.wraps(name="resources.cache")
-def get_cache_path(path: Union[str, Path, None]) -> Path:
+def get_cache_path(path: Union[str, Path, None] = None) -> Path:
+    if path is None:
+        with suppress(AttributeError):
+            path = config.resources.cache.path
     if path is not None:
         return Path(path).expanduser()
     try:
