@@ -2,17 +2,26 @@ from __future__ import annotations
 
 import functools
 import inspect
-from collections.abc import Mapping, MutableMapping
-from dataclasses import asdict
-from typing import Any, Iterator, Optional, Type, TypeVar, Union, overload
+from dataclasses import dataclass
+from typing import (
+    Any,
+    MutableMapping,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    overload,
+)
 
-from octoflow.utils.objects import create_object
+from omegaconf import OmegaConf
+from typing_extensions import Self
 
 __all__ = [
     "Config",
 ]
 
-T = TypeVar("T")
+
+T = TypeVar("T", bound=dataclass)
 
 
 class ConfigWrapper:
@@ -43,7 +52,8 @@ class ConfigWrapper:
             config = config[part]
         # update args
         for k in config:
-            if k in args:  # and args[k] is not __placeholder__
+            if k in args:
+                # and args[k] is not __placeholder__
                 # already set - do not override
                 continue
             args[k] = config[k]
@@ -60,78 +70,50 @@ class ConfigWrapper:
         }
         args = self.signature.bind_partial(**args)
         args.apply_defaults()
-        args = args.arguments
-        return args
+        return args.arguments
 
     def __call__(self, *args, **kwargs):
         return self.wrapped(**self.get_params(*args, **kwargs))
 
 
-class FrozenConfig(Mapping):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
-        self._data = dict(*args, **kwargs)
-        self._parent = None
+def configmethod(func: T) -> T:
+    @functools.wraps(func)
+    def decoratior(cls, *args, **kwargs):
+        return cls(func(cls, *args, **kwargs))
 
-    def get_root(self) -> FrozenConfig:
-        if self._parent is None:
-            # this is the root
-            return self
-        # recursively get root
-        return self._parent.get_root()
+    return decoratior
 
-    def set_parent(self, parent: FrozenConfig) -> FrozenConfig:
-        self._parent = parent
-        return self
 
-    def __getitem__(self, key: str) -> Any:
-        value = self._data[key]
-        if isinstance(value, dict):
-            if "$type" in value:
-                # value is an object
-                params = dict(value.items())
-                cls = params.pop("$type")
-                partial = params.pop("$partial", False)
-                kwargs = FrozenConfig(params).to_dict()
-                return create_object(
-                    cls,
-                    partial,
-                    **kwargs,
-                )
-            else:
-                return FrozenConfig(value).set_parent(self)
-        elif isinstance(value, str):
-            return value.format(root=self.get_root(), self=self)
-        return value
+class Config(MutableMapping):
+    @overload
+    def __new__(cls, config: Type[T]) -> T: ...
 
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError(name) from None
+    def __init__(self, config: Any) -> None:
+        self.omconf = (
+            config
+            if isinstance(config, OmegaConf)
+            else OmegaConf.structured(config)
+            if isinstance(config, dataclass)
+            else OmegaConf.create(config)
+        )
+
+    def __getitem__(self, name: str) -> Any:
+        return self.omconf[name]
+
+    def __setitem__(self, name: str, value: Any) -> None:
+        self.omconf[name] = value
+
+    def __delitem__(self, name: str) -> None:
+        del self.omconf[name]
+
+    def __iter__(self) -> Any:
+        return iter(self.omconf)
 
     def __len__(self) -> int:
-        return len(self._data)
+        return len(self.omconf)
 
-    def __iter__(self) -> Iterator:
-        yield from self._data
-
-    def to_dict(self) -> dict:
-        out = {}
-        for k, v in self.items():
-            out[k] = v.to_dict() if isinstance(v, FrozenConfig) else v
-        return out
-
-    def __reduce__(self) -> tuple:
-        return (self.__class__, (self._data,))
-
-
-class Config(FrozenConfig, MutableMapping):
-    def __setitem__(self, key: str, value: Any) -> None:
-        self._data[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self._data[key]
+    def __getattr__(self, name: str) -> Any:
+        return self.omconf[name]
 
     @overload
     def wraps(
@@ -144,7 +126,7 @@ class Config(FrozenConfig, MutableMapping):
     ) -> functools.partial: ...
 
     def wraps(
-        self, wrapped: Union[type, callable, str, None] = None, **kwargs
+        self, wrapped: Union[type, callable, str, None] = None, **kwargs: Any
     ) -> Union[ConfigWrapper, functools.partial]:
         if isinstance(wrapped, str):
             return functools.partial(self.wraps, name=wrapped)
@@ -152,9 +134,7 @@ class Config(FrozenConfig, MutableMapping):
             # empty builder call
             return functools.partial(self.wraps, **kwargs)
         config_wrapper = ConfigWrapper(
-            wrapped,
-            self,
-            name=kwargs.get("name", None),
+            wrapped, self, name=kwargs.get("name", None)
         )
         if isinstance(config_wrapper, type):  # if class
             orig_init = config_wrapper.__init__
@@ -173,5 +153,16 @@ class Config(FrozenConfig, MutableMapping):
         return builder_wrapper
 
     @classmethod
-    def structured(cls, dc: Type[T]) -> T:
-        return cls(**asdict(dc()))
+    @configmethod
+    def load(cls, path: str) -> Self:
+        return OmegaConf.load(path)
+
+    @classmethod
+    @configmethod
+    def from_dotlist(cls, dotlist: str) -> Self:
+        return OmegaConf.from_dotlist(dotlist)
+
+    @classmethod
+    @configmethod
+    def from_cli(cls, args: list[str]) -> Self:
+        return OmegaConf.from_cli(args)

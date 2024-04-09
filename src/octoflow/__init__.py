@@ -1,7 +1,7 @@
 import contextlib
 
 from octoflow import logging
-from octoflow._config import config
+from octoflow.config import config
 from octoflow.tracking import Experiment, Run, TrackingClient, Value
 from octoflow.utils.config import Config
 

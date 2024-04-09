@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from octoflow.utils.config import Config
 
@@ -9,12 +10,12 @@ __all__ = [
 
 @dataclass
 class CacheConfig:
-    path: str = "{root.resources.path}/cache"
+    path: Path = "${oc.select:resources.path}/cache"
 
 
 @dataclass
 class ResourcesConfig:
-    path: str = "~/.octoflow"
+    path: Path = "~/.octoflow"
     cache: CacheConfig = field(default_factory=CacheConfig)
 
 
@@ -30,4 +31,4 @@ class OctoFlowConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
-config = Config.structured(OctoFlowConfig)
+config = Config(OctoFlowConfig)
