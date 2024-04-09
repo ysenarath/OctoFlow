@@ -303,13 +303,13 @@ class DocumentBatch(Sequence[Document]):
             sample = self._data
         return f"DocumentList[{self._length}]({sample})"
 
-    def to_batch(self) -> pa.RecordBatch:
+    def to_arrow(self) -> pa.RecordBatch:
         """Return the document list as a table.
 
         Returns
         -------
-        pa.Table
-            The document list as a table.
+        pa.RecordBatch
+            The document list as a RecordBatch.
         """
         id_field = pa.field("_id", self._id_type)
         fields = [id_field]
@@ -321,8 +321,8 @@ class DocumentBatch(Sequence[Document]):
         return pa.record_batch(arrays, schema=pa.schema(fields))
 
     @classmethod
-    def from_batch(cls, batch: Union[pa.RecordBatch, pa.Table]) -> Self:
-        """Create a document batch from a pyarrow.RecordBatch.
+    def from_arrow(cls, batch: Union[pa.RecordBatch, pa.Table]) -> Self:
+        """Create a document batch from a pyarrow.RecordBatch or pyarrow.Table.
 
         Parameters
         ----------
@@ -331,7 +331,7 @@ class DocumentBatch(Sequence[Document]):
 
         Returns
         -------
-        DocumentList
+        DocumentBatch
             The document list.
         """
         this = cls.__new__(cls)
