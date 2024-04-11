@@ -162,3 +162,4 @@ cython_debug/
 logs/
 scratch/
 examples/data.jsonl
+examples/project/
