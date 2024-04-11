@@ -1,4 +1,4 @@
-from octoflow.project.base import Project
+from octoflow.project.project import Project
 
 __all__ = [
     "Project",
