@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import functools
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from typing import (
     Any,
     MutableMapping,
@@ -88,12 +88,18 @@ class Config(MutableMapping):
     @overload
     def __new__(cls, config: Type[T]) -> T: ...
 
+    @overload
+    def __new__(cls, config: dict[str, Any]) -> Self: ...
+
+    def __new__(cls, config: Union[Type[T], dict[str, Any]]) -> Union[T, Self]:
+        return super().__new__(cls)
+
     def __init__(self, config: Any) -> None:
         self.omconf = (
             config
             if isinstance(config, OmegaConf)
             else OmegaConf.structured(config)
-            if isinstance(config, dataclass)
+            if is_dataclass(config)
             else OmegaConf.create(config)
         )
 
