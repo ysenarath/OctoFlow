@@ -318,7 +318,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         func: Any,
         batch_size: int = DEFAULT_BATCH_SIZE,
         batched: bool = False,
-        verbose: Union[bool, int] = 0,
+        verbose: Union[bool, int] = 1,
     ) -> Dataset:
         """
         Map a function over the dataset.
@@ -357,17 +357,15 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                         axis=1,
                     )
                 )
-                for batch in self._wrapped.to_batches(batch_size=batch_size)
-            )
-            _ = write_dataset(
-                path,
-                tqdm.tqdm(
-                    batch_iter,
+                for batch in tqdm.tqdm(
+                    self._wrapped.to_batches(batch_size=batch_size),
                     total=num_batches,
                     desc="Mapping",
                 )
-                if verbose
-                else batch_iter,
+            )
+            _ = write_dataset(
+                path,
+                batch_iter if verbose else batch_iter,
                 format=self.format,
             )
         return type(self).load_dataset(path, format=self.format)
