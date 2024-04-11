@@ -19,6 +19,7 @@ import pandas as pd
 import pyarrow as pa
 from numpy.typing import ArrayLike
 from pandas import DataFrame
+from tqdm import auto as tqdm
 
 from octoflow import logging
 from octoflow.data.base import BaseDataset
@@ -28,6 +29,7 @@ from octoflow.data.loaders import DatasetLoader, loaders
 from octoflow.data.utils import (
     generate_unique_path,
     read_dataset,
+    record_batch,
     write_dataset,
 )
 from octoflow.utils import hashutils
@@ -316,6 +318,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         func: Any,
         batch_size: int = DEFAULT_BATCH_SIZE,
         batched: bool = False,
+        verbose: Union[bool, int] = 0,
     ) -> Dataset:
         """
         Map a function over the dataset.
@@ -328,6 +331,8 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             Number of rows to map at a time.
         batched : bool
             Whether the function is batched.
+        verbose : bool | int
+            Whether to show a progress bar.
 
         Returns
         -------
@@ -342,9 +347,10 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                 " existing file(s)"
             )
         else:
+            num_batches = ((self.count_rows() - 1) // batch_size) + 1
             batch_iter = (
-                pa.RecordBatch.from_pandas(
-                    func(batch.to_pandas())
+                record_batch(
+                    func(batch)
                     if batched
                     else batch.to_pandas().apply(
                         _map_func_wrapper(func),
@@ -355,7 +361,13 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             )
             _ = write_dataset(
                 path,
-                batch_iter,
+                tqdm.tqdm(
+                    batch_iter,
+                    total=num_batches,
+                    desc="Mapping",
+                )
+                if verbose
+                else batch_iter,
                 format=self.format,
             )
         return type(self).load_dataset(path, format=self.format)
