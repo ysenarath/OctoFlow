@@ -341,33 +341,44 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         """
         fingerprint = hashutils.hash(func)
         path = self.path / f"map-{fingerprint}"
-        if path.exists():
-            logger.warning(
-                f"existing dataset found at '{path}', loading"
-                " existing file(s)"
+        num_batches = ((self.count_rows() - 1) // batch_size) + 1
+        progress_bar = (
+            tqdm.tqdm(
+                self._wrapped.to_batches(batch_size=batch_size),
+                total=num_batches,
+                desc=f"Mapping [{fingerprint}]",
             )
+            if verbose
+            else None
+        )
+        if progress_bar is None:
+            batch_iter = self._wrapped.to_batches(batch_size=batch_size)
         else:
-            num_batches = ((self.count_rows() - 1) // batch_size) + 1
-            batch_iter = (
-                record_batch(
-                    func(batch)
-                    if batched
-                    else batch.to_pandas().apply(
-                        _map_func_wrapper(func),
-                        axis=1,
-                    )
-                )
-                for batch in tqdm.tqdm(
-                    self._wrapped.to_batches(batch_size=batch_size),
-                    total=num_batches,
-                    desc="Mapping",
+            batch_iter = progress_bar
+        batch_iter = (
+            record_batch(
+                func(batch)
+                if batched
+                else batch.to_pandas().apply(
+                    _map_func_wrapper(func),
+                    axis=1,
                 )
             )
-            _ = write_dataset(
-                path,
-                batch_iter if verbose else batch_iter,
-                format=self.format,
+            for batch in batch_iter
+        )
+        state = write_dataset(
+            path,
+            batch_iter if verbose else batch_iter,
+            format=self.format,
+        )
+        if not state:
+            logger.warning(
+                f"existing dataset found at '{path}', "
+                "loading existing file(s)"
             )
+        if progress_bar is not None:
+            progress_bar.update(num_batches)
+            progress_bar.close()
         return type(self).load_dataset(path, format=self.format)
 
     def filter(self, expression: Expression = None) -> Dataset:
@@ -389,18 +400,17 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         pyarrow_expression = expression.to_pyarrow()
         fingerprint = hashutils.hash(pyarrow_expression)
         path = self.path / f"filter-{fingerprint}"
-        if path.exists():
+        dataset = self._wrapped.filter(pyarrow_expression)
+        state = write_dataset(
+            path,
+            dataset,
+            schema=dataset.schema,
+            format=self.format,
+        )
+        if not state:
             logger.warning(
-                f"existing dataset found at '{path}', loading"
-                " existing file(s)"
-            )
-        else:
-            dataset = self._wrapped.filter(pyarrow_expression)
-            write_dataset(
-                path,
-                dataset,
-                schema=dataset.schema,
-                format=self.format,
+                f"existing dataset found at '{path}', "
+                "loading existing file(s)"
             )
         return self.load_dataset(path, format=self.format)
 
