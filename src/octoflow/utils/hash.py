@@ -5,13 +5,22 @@ import xxhash
 
 __all__ = [
     "hash",
+    "register",
 ]
+
+dispatch = {}
+
+
+def register(type_):
+    def decorator(func):
+        dispatch[type_] = func
+        return func
+
+    return decorator
 
 
 class Hasher:
     """Hasher that accepts python objets as inputs."""
-
-    dispatch = {}
 
     def __init__(self):
         self.m = xxhash.xxh64()
@@ -30,15 +39,15 @@ class Hasher:
 
     @classmethod
     def hash(cls, value: Any) -> str:
-        if type(value) in cls.dispatch:
-            return cls.dispatch[type(value)](cls, value)
+        if type(value) in dispatch:
+            return dispatch[type(value)](cls, value)
         else:
             return cls.hash_default(value)
 
     def update(self, value: Any) -> None:
         header_for_update = f"=={type(value)}=="
         value_for_update = self.hash(value)
-        self.m.update(header_for_update.encode("utf8"))
+        self.m.update(header_for_update.encode("utf-8"))
         self.m.update(value_for_update.encode("utf-8"))
 
     def hexdigest(self) -> str:

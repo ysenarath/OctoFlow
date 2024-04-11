@@ -5,4 +5,4 @@ build:
 	hatch build
 
 publish:
-	hatch publish
+	twine upload dist/*

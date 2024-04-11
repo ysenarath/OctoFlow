@@ -1,205 +1,42 @@
-from __future__ import annotations
+from dataclasses import dataclass, field
+from pathlib import Path
 
-import functools
-import inspect
-from collections.abc import Mapping, MutableMapping
-from typing import Any, Iterator, Optional, Union, overload
-
-from octoflow.utils.objects import create_object
+from octoflow.utils.config import Config
 
 __all__ = [
-    "Config",
+    "config",
 ]
 
 
-class ConfigWrapper:
-    def __init__(self, wrapped, config: Config, name: Optional[str] = None):
-        if name is None:
-            name = getattr(wrapped, "__name__", None)
-        if name is None:
-            name = getattr(wrapped, "__qualname__", None)
-        if name is None:
-            msg = "builder must have a name"
-            raise ValueError(msg)
-        self.wrapped = wrapped
-        self.signature = inspect.signature(wrapped)
-        filter_keys = set()
-        for param in self.signature.parameters.values():
-            if param.kind == param.POSITIONAL_OR_KEYWORD:
-                filter_keys.add(param.name)
-        self.filter_keys = filter_keys
-        self.name = name
-        self.config = config
-
-    def _update_params_from_config(self, args: dict) -> dict:
-        config = self.config
-        for part in self.name.split("."):
-            if part not in config:
-                # function or class name or alias is not in config
-                return args
-            config = config[part]
-        # update args
-        for k in config:
-            if k in args:  # and args[k] is not __placeholder__
-                # already set - do not override
-                continue
-            args[k] = config[k]
-        return args
-
-    def get_params(self, *args, **kwargs):
-        args = self.signature.bind_partial(*args, **kwargs)
-        args = args.arguments
-        args = self._update_params_from_config(args)
-        args = {
-            k: v
-            for k, v in args.items()
-            if k in self.filter_keys and v is not inspect.Parameter.empty
-        }
-        args = self.signature.bind_partial(**args)
-        args.apply_defaults()
-        args = args.arguments
-        return args
-
-    def __call__(self, *args, **kwargs):
-        return self.wrapped(**self.get_params(*args, **kwargs))
+@dataclass
+class CacheConfig:
+    path: Path = "${oc.select:resources.path}/cache"
 
 
-class FrozenConfig(Mapping):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
-        self._data = dict(*args, **kwargs)
-        self._parent = None
-
-    def get_root(self) -> FrozenConfig:
-        """
-        Get the root config object.
-
-        Returns
-        -------
-        FrozenConfig
-            The root config object.
-        """
-        if self._parent is None:
-            # this is the root
-            return self
-        # recursively get root
-        return self._parent.get_root()
-
-    def set_parent(self, parent: FrozenConfig) -> FrozenConfig:
-        """
-        Set the parent config object.
-
-        Parameters
-        ----------
-        parent : FrozenConfig
-            The parent config object.
-
-        Returns
-        -------
-        FrozenConfig
-            The current config object.
-        """
-        self._parent = parent
-        return self
-
-    def __getitem__(self, key: str) -> Any:
-        value = self._data[key]
-        if isinstance(value, dict):
-            if "$type" in value:
-                # value is an object
-                params = dict(value.items())
-                cls = params.pop("$type")
-                partial = params.pop("$partial", False)
-                kwargs = FrozenConfig(params).to_dict()
-                return create_object(
-                    cls,
-                    partial,
-                    **kwargs,
-                )
-            else:
-                return FrozenConfig(value).set_parent(self)
-        elif isinstance(value, str):
-            return value.format(root=self.get_root(), self=self)
-        return value
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError(name) from None
-
-    def __len__(self) -> int:
-        return len(self._data)
-
-    def __iter__(self) -> Iterator:
-        yield from self._data
-
-    def to_dict(self) -> dict:
-        out = {}
-        for k, v in self.items():
-            out[k] = v.to_dict() if isinstance(v, FrozenConfig) else v
-        return out
-
-    def __reduce__(self) -> tuple:
-        return (self.__class__, (self._data,))
+@dataclass
+class DataConfig:
+    path: Path = "${oc.select:resources.path}/data"
 
 
-class Config(FrozenConfig, MutableMapping):
-    def __setitem__(self, key: str, value: Any) -> None:
-        self._data[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self._data[key]
-
-    @overload
-    def wraps(
-        self, wrapped: Union[type, callable], **kwargs
-    ) -> ConfigWrapper: ...
-
-    @overload
-    def wraps(
-        self, wrapped: Union[str, None], **kwargs
-    ) -> functools.partial: ...
-
-    def wraps(
-        self, wrapped: Union[type, callable, str, None] = None, **kwargs
-    ) -> Union[ConfigWrapper, functools.partial]:
-        if isinstance(wrapped, str):
-            return functools.partial(self.wraps, name=wrapped)
-        elif wrapped is None:
-            # empty builder call
-            return functools.partial(self.wraps, **kwargs)
-        config_wrapper = ConfigWrapper(
-            wrapped,
-            self,
-            name=kwargs.get("name", None),
-        )
-        if isinstance(config_wrapper, type):  # if class
-            orig_init = config_wrapper.__init__
-
-            @functools.wraps(config_wrapper.__init__)
-            def __init__(self, *args, **kwargs):  # noqa: N807
-                orig_init(self, **config_wrapper.get_params(*args, **kwargs))
-
-            config_wrapper.__init__ = __init__
-            return config_wrapper
-
-        @functools.wraps(config_wrapper)
-        def builder_wrapper(*args, **kwargs):
-            return config_wrapper(*args, **kwargs)
-
-        return builder_wrapper
+@dataclass
+class ResourcesConfig:
+    path: Path = "~/.octoflow"
+    # for user data
+    cache: CacheConfig = field(default_factory=CacheConfig)
+    # for octoflow data ???
+    data: DataConfig = field(default_factory=DataConfig)
 
 
-config = Config({
-    "resources": {
-        "path": "~/.octoflow",
-        "cache": {
-            "path": "{root.resources.path}/cache",
-        },
-    },
-    "logging": {
-        "level": "INFO",
-        "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
-    },
-})
+@dataclass
+class LoggingConfig:
+    level: str = "INFO"
+    format: str = "%(asctime)s %(levelname)s %(name)s %(message)s"
+
+
+@dataclass
+class OctoFlowConfig:
+    resources: ResourcesConfig = field(default_factory=ResourcesConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+
+
+config = Config(OctoFlowConfig)

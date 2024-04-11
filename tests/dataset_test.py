@@ -2,7 +2,7 @@ import unittest
 
 import pandas as pd
 
-from octoflow.data.compute import Expression
+from octoflow.data.expression import Expression
 from octoflow.data.dataset import Dataset
 
 
