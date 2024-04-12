@@ -123,7 +123,9 @@ def write_dataset(
     # and then move the data to the desired
     # directory
     ds.write_dataset(
-        data if isinstance(data, ds.Dataset) else record_batch(data),
+        data
+        if isinstance(data, (ds.Dataset, ds.Scanner))
+        else record_batch(data),
         temp_path,
         schema=schema,
         format=format,
