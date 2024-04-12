@@ -19,6 +19,6 @@ dataset = Dataset(data).map(
     batch_size=2,
 )
 
-docs = dataset[0:2]
+docs = dataset.select("name")[0:2]
 
 print(docs)
