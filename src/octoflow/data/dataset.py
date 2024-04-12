@@ -16,6 +16,7 @@ from typing import (
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import pyarrow as pa
 from numpy.typing import ArrayLike
 from pandas import DataFrame
@@ -342,19 +343,15 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         fingerprint = hashutils.hash(func)
         path = self.path / f"map-{fingerprint}"
         num_batches = ((self.count_rows() - 1) // batch_size) + 1
-        progress_bar = (
-            tqdm.tqdm(
-                self._wrapped.to_batches(batch_size=batch_size),
+        batch_iter = self._wrapped.to_batches(batch_size=batch_size)
+        if verbose:
+            progress_bar = tqdm.tqdm(
+                batch_iter,
                 total=num_batches,
                 desc=f"Mapping [{fingerprint}]",
             )
-            if verbose
-            else None
-        )
-        if progress_bar is None:
-            batch_iter = self._wrapped.to_batches(batch_size=batch_size)
         else:
-            batch_iter = progress_bar
+            progress_bar = None
         batch_iter = (
             record_batch(
                 func(batch)
@@ -364,11 +361,11 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                     axis=1,
                 )
             )
-            for batch in batch_iter
+            for batch in (batch_iter if progress_bar is None else progress_bar)
         )
         state = write_dataset(
             path,
-            batch_iter if verbose else batch_iter,
+            batch_iter,
             format=self.format,
         )
         if not state:
@@ -496,3 +493,14 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         inst._path = path
         inst._format = format
         return inst
+
+    def to_polars(self) -> pl.LazyFrame:
+        """
+        Convert the dataset to a Polars DataFrame.
+
+        Returns
+        -------
+        pl.LazyFrame
+            The Polars Lazy DataFrame.
+        """
+        return pl.scan_ipc(self.path / "data" / "*.arrow")
