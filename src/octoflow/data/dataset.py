@@ -20,6 +20,7 @@ import polars as pl
 import pyarrow as pa
 from numpy.typing import ArrayLike
 from pandas import DataFrame
+from pyarrow import dataset as ds
 from tqdm import auto as tqdm
 
 from octoflow import logging
@@ -186,6 +187,17 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             The number of rows in the dataset.
         """
         return self._wrapped.count_rows()
+
+    def __len__(self) -> int:
+        """
+        Get the number of rows in the dataset.
+
+        Returns
+        -------
+        int
+            The number of rows in the dataset.
+        """
+        return self.count_rows()
 
     def head(
         self,
@@ -411,6 +423,45 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             )
         return self.load_dataset(path, format=self.format)
 
+    def select(
+        self,
+        columns: Union[str, List[str]],
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Dataset:
+        """
+        Select columns from the dataset.
+
+        Parameters
+        ----------
+        columns : str, list of str
+            Names of columns to select.
+
+        Returns
+        -------
+        Dataset
+            A new dataset containing only the selected columns.
+        """
+        if isinstance(columns, str):
+            columns = [columns]
+        fingerprint = hashutils.hash(columns)
+        path = self.path / f"select-{fingerprint}"
+        scanner = ds.Scanner(
+            self._wrapped,
+            columns=columns,
+            batch_size=batch_size,
+        )
+        state = write_dataset(
+            path,
+            scanner,
+            format=self.format,
+        )
+        if not state:
+            logger.warning(
+                f"existing dataset found at '{path}', "
+                "loading existing file(s)"
+            )
+        return self.load_dataset(path, format=self.format)
+
     def cleanup(self):
         """
         Delete the directory containing the dataset.
@@ -422,17 +473,6 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         if not self.path.exists():
             return
         shutil.rmtree(self.path)
-
-    def __len__(self) -> int:
-        """
-        Get the number of rows in the dataset.
-
-        Returns
-        -------
-        int
-            The number of rows in the dataset.
-        """
-        return self.count_rows()
 
     def __enter__(self) -> Dataset:
         """
