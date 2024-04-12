@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from octoflow.data.dataset import DEFAULT_FORMAT, Dataset
+from octoflow.data.expression import Expression
 from octoflow.data.loaders import dataloader
 from octoflow.data.loaders import loaders as _loaders
 
@@ -11,6 +12,9 @@ __all__ = [
     "load_dataset",
     "dataloader",
     "Dataset",
+    "Expression",
+    "field",
+    "scalar",
 ]
 
 
@@ -63,3 +67,8 @@ def load_dataset(
         loader_args=args,
         loader_kwargs=kwargs,
     )
+
+
+field = Expression.field
+
+scalar = Expression.scalar
