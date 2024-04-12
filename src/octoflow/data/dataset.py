@@ -445,7 +445,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             columns = [columns]
         fingerprint = hashutils.hash(columns)
         path = self.path / f"select-{fingerprint}"
-        scanner = ds.Scanner(
+        scanner = ds.Scanner.from_dataset(
             self._wrapped,
             columns=columns,
             batch_size=batch_size,
