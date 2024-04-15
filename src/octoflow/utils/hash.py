@@ -1,60 +1,100 @@
-from typing import Any, List, Union
+from __future__ import annotations
+
+import functools
+import inspect
+import pickle  # noqa: S403
+from typing import (
+    Any,
+    Literal,
+    Optional,
+    Protocol,
+    TypeVar,
+    Union,
+    runtime_checkable,
+)
 
 import dill  # noqa: S403
 import xxhash
 
 __all__ = [
     "hash",
-    "register",
 ]
 
-dispatch = {}
+T = TypeVar("T")
 
 
-def register(type_):
-    def decorator(func):
-        dispatch[type_] = func
-        return func
-
-    return decorator
+@runtime_checkable
+class Hashable(Protocol):
+    def __octoflow_update_hash__(self, m: xxhash.xxh64):  # noqa: PLW3201
+        m.update(dill.dumps(self))
 
 
-class Hasher:
-    """Hasher that accepts python objets as inputs."""
-
-    def __init__(self):
-        self.m = xxhash.xxh64()
-
-    @classmethod
-    def hash_bytes(cls, value: Union[bytes, List[bytes]]) -> str:
-        value = [value] if isinstance(value, bytes) else value
-        m = xxhash.xxh64()
-        for x in value:
+def hash(value: Any, *, __m: Optional[xxhash.xxh64] = None) -> str:
+    m = xxhash.xxh64() if __m is None else __m
+    header = f"=={type(value)}=="
+    m.update(header.encode("utf-8"))
+    try:
+        for x in [value] if isinstance(value, bytes) else value:
             m.update(x)
-        return m.hexdigest()
-
-    @classmethod
-    def hash_default(cls, value: Any) -> str:
-        return cls.hash_bytes(dill.dumps(value))
-
-    @classmethod
-    def hash(cls, value: Any) -> str:
-        if type(value) in dispatch:
-            return dispatch[type(value)](cls, value)
+    except TypeError:
+        if isinstance(value, Hashable):
+            value.__octoflow_update_hash__(m)
         else:
-            return cls.hash_default(value)
-
-    def update(self, value: Any) -> None:
-        header_for_update = f"=={type(value)}=="
-        value_for_update = self.hash(value)
-        self.m.update(header_for_update.encode("utf-8"))
-        self.m.update(value_for_update.encode("utf-8"))
-
-    def hexdigest(self) -> str:
-        return self.m.hexdigest()
+            m.update(dill.dumps(value))
+    return m.hexdigest()
 
 
-def hash(obj: Any) -> str:
-    h = Hasher()
-    h.update(obj)
-    return h.hexdigest()
+class HashUpdater:
+    def __init__(
+        self,
+        mode: Union[
+            Literal[
+                "dill",
+                "pickle",
+                "pkl",
+                "source",
+                "src",
+            ],
+            callable,
+        ],
+        version: Optional[str] = None,
+        obj: Any = None,
+    ) -> None:
+        self.mode = mode
+        self.version = version
+        self.obj = obj
+
+    def __call__(self, m: xxhash.xxh64) -> None:
+        # add a sub header
+        header = f"=={type(self.obj)}=="
+        m.update(header.encode("utf-8"))
+        # add the version
+        version_hash = self.version.encode("utf-8") if self.version else b""
+        m.update(version_hash)
+        # add the object hash
+        if self.mode == "dill":
+            val_hash = dill.dumps(self.obj)
+        elif self.mode in {"pickle", "pkl"}:
+            val_hash = pickle.dumps(self.obj)
+        elif self.mode in {"source", "src"}:
+            val_hash = inspect.getsource(self.obj).encode("utf-8")
+        elif callable(self.mode):
+            val_hash = self.mode(self.obj)
+        else:
+            msg = f"invalid mode: {self.mode}"
+            raise ValueError(msg)
+        m.update(val_hash)
+
+
+def hashable(
+    mode: Union[
+        Literal["dill", "pickle", "pkl", "source", "src"],
+        callable,
+    ] = "dill",
+    version: None[str] = None,
+    obj: T = None,
+) -> T:
+    if obj is None:
+        return functools.partial(hashable, mode, version)
+    obj.__octoflow_update_hash__ = HashUpdater(mode, version, obj)
+    return obj
