@@ -48,13 +48,7 @@ class HashUpdater:
     def __init__(
         self,
         mode: Union[
-            Literal[
-                "dill",
-                "pickle",
-                "pkl",
-                "source",
-                "src",
-            ],
+            Literal["dill", "pickle", "pkl", "source", "src"],
             callable,
         ],
         version: Optional[str] = None,
