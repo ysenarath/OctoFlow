@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import datetime as dt
+import typing
+from dataclasses import is_dataclass
 from typing import Any, NamedTuple, Union
 
 import numpy as np
 import pyarrow as pa
 
 from octoflow.data.metadata import unify_metadata
+
+try:
+    from typing import _TypedDictMeta
+except ImportError:
+    from typing_extensions import _TypedDictMeta
+
 
 __all__ = [
     "MonthDayNano",
@@ -49,6 +57,65 @@ def is_undefined(obj: pa.DataType) -> bool:
     return UNDEFINED.equals(obj)
 
 
+def from_dataclass(cls: type) -> pa.DataType:
+    """Return the PyArrow data type of a dataclass.
+
+    Parameters
+    ----------
+    cls : type
+        The dataclass.
+
+    Returns
+    -------
+    pa.DataType
+        The PyArrow data type.
+    """
+    fields = {}
+    for field_name, field_type in typing.get_type_hints(cls).items():
+        f = cls.__dataclass_fields__[field_name]
+        nullable = True
+        if hasattr(f, "nullable"):
+            nullable = f.nullable
+        fields[field_name] = pa.field(
+            field_name,
+            from_dtype(field_type),
+            nullable,
+        )
+    fields = list(fields.values())
+    return pa.struct(fields)
+
+
+def from_typed_dict(cls: _TypedDictMeta) -> pa.DataType:
+    """Return the PyArrow data type of a TypedDict.
+
+    Parameters
+    ----------
+    cls : _TypedDictMeta
+        The TypedDict.
+
+    Returns
+    -------
+    pa.DataType
+        The PyArrow data type.
+    """
+    fields = {}
+    for field_name, field_type in typing.get_type_hints(cls).items():
+        fields[field_name] = pa.field(
+            field_name,
+            from_dtype(field_type),
+            True,
+        )
+    fields = list(fields.values())
+    return pa.struct(fields)
+
+
+def from_union(args: tuple[type, ...]) -> pa.DataType:
+    unified_type = undefined()
+    for arg in args:
+        unified_type = unify_types(unified_type, from_dtype(arg))
+    return unified_type
+
+
 def from_dtype(dtype: Union[type, np.dtype, None]) -> pa.DataType:
     """Return the PyArrow data type of a provided native/NumPy data type.
 
@@ -62,9 +129,26 @@ def from_dtype(dtype: Union[type, np.dtype, None]) -> pa.DataType:
     pa.DataType
         The PyArrow data type.
     """
+    type_args = typing.get_args(dtype)
+    dtype = typing.get_origin(dtype) or dtype
+    # null
     if dtype is None or dtype is type(None):
         return pa.null()
+    # special types
+    if dtype is Union:
+        return from_union(type_args)
+    # basic python data types
     if isinstance(dtype, type):
+        if is_dataclass(dtype):
+            return from_dataclass(dtype)
+        if issubclass(dtype, _TypedDictMeta):
+            return from_typed_dict(dtype)
+        if issubclass(dtype, list):
+            (item_arg,) = type_args
+            return pa.list_(pa.field("item", from_dtype(item_arg)))
+        if issubclass(dtype, dict):
+            key_arg, value_arg = type_args
+            return pa.map_(from_dtype(key_arg), from_dtype(value_arg))
         if issubclass(dtype, str):
             return pa.string()
         if issubclass(dtype, bytes):
@@ -85,6 +169,7 @@ def from_dtype(dtype: Union[type, np.dtype, None]) -> pa.DataType:
             return pa.duration("us")
         if issubclass(dtype, MonthDayNano):
             return pa.month_day_nano_interval()
+    # numpy data types
     if not isinstance(dtype, np.dtype):
         # convert dtype (obj/type) to np.dtype
         dtype = np.dtype(dtype)

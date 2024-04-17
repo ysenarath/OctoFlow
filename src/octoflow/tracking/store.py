@@ -19,7 +19,7 @@ from typing import (
     Union,
 )
 
-from octoflow.utils.model import ModelBase
+from octoflow.data.dataclass import BaseModel
 
 if TYPE_CHECKING:
     from octoflow.tracking.models import (
@@ -43,7 +43,7 @@ VariableType = Literal["param", "metric"]
 ValueType = Union[str, float, int, bool, None]
 
 
-class StoredModel(ModelBase):
+class StoredModel(BaseModel):
     def __post_init__(self):
         super().__post_init__()
         store = store_cv.get()

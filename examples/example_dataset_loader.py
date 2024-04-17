@@ -1,27 +1,37 @@
-import pandas as pd
+from typing import List, Union
 
-from octoflow.data import load_dataset
-from octoflow.data.expression import Expression
+from octoflow.data import load_dataset, schema
+from octoflow.data.dataclass import BaseModel, field, fieldset
 
 dset = load_dataset("jsonl", "./examples/*.jsonl")
 
-n = Expression.field("name")
+
+class Address(BaseModel):
+    street: str = field()
+    city: str = field()
+    state: str = field()
+    zip: str = field()
 
 
-def map_fn(x: dict):
-    x["lo_name"] = x["name"].lower()
-    return x
+class User(BaseModel):
+    name: str = field()
+    age: Union[float, int] = field()
+    address: Address = field()
+    phone: str = field()
+    emails: List[str] = field()
 
 
-def map_batched_fn(x: pd.DataFrame):
-    x["up_name"] = x["name"].str.upper()
-    return x
+s = schema.from_dataclass(User)
 
+print(s)
 
-up_dset = (
-    dset.map(map_fn)
-    .map(map_batched_fn, batched=True)
-    .filter(n == "Benjamin White")
+print(
+    fieldset(User).address({
+        "address": {
+            "street": "123 Main St",
+            "city": "Springfield",
+            "state": "IL",
+            "zip": "62701",
+        }
+    })
 )
-
-print(up_dset[0])

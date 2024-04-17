@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Union
 
+from octoflow.data.dataclass import field
 from octoflow.data.dataset import DEFAULT_FORMAT, Dataset
-from octoflow.data.expression import Expression, field, scalar
+from octoflow.data.expression import Expression, scalar
 from octoflow.data.loaders import dataloader
 from octoflow.data.loaders import loaders as _loaders
 

@@ -1,22 +1,11 @@
-from typing import Optional, runtime_checkable
-
-from typing_extensions import Protocol
+from typing import Any, Optional
 
 __all__ = [
-    "MetadataMixin",
     "unify_metadata",
 ]
 
 
-@runtime_checkable
-class MetadataMixin(Protocol):
-    metadata: Optional[dict]
-
-
-def unify_metadata(
-    left: MetadataMixin,
-    right: MetadataMixin,
-) -> Optional[dict]:
+def unify_metadata(left: Any, right: Any) -> Optional[dict]:
     # merge metadata left then right
     #   (right metadata will overwrite left metadata)
     metadata = left.metadata

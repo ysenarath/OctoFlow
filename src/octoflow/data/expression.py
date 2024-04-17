@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from operator import itemgetter
-from typing import Any, Mapping, Tuple, Union
+from typing import Any, Union
 
-import pyarrow as pa
 import pyarrow.dataset as ds
-from pyarrow.dataset import field as pyarrow_field
 from pyarrow.dataset import scalar as pyarrow_scalar
-from typing_extensions import Self
 
 from octoflow.data.base import BaseExpression
 
@@ -264,85 +260,7 @@ class Expression(BaseExpression):
         return f"Expression({self._wrapped!r})"
 
 
-class Field(Expression):
-    def __new__(
-        cls,
-        field: Union[itemgetter, str, Tuple[str], Self],
-        /,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Self:
-        """Create a new field getter.
-
-        Parameters
-        ----------
-        field : Union[itemgetter, str, Tuple[str], FieldGetter]
-            The field to be accessed.
-        args : Any
-            Additional arguments.
-        kwargs : Any
-            Additional keyword arguments.
-
-        Returns
-        -------
-        FieldGetter
-            The field getter.
-        """
-        if isinstance(field, Field):
-            return field
-        return super().__new__(cls)
-
-    def __init__(
-        self,
-        field: Union[str, Tuple[str], itemgetter],
-        /,
-        type: Union[pa.DataType, None] = None,
-        preprocessor: Union[callable, None] = None,
-    ):
-        """Create a new field getter.
-
-        Parameters
-        ----------
-        field : Union[itemgetter, str, FieldGetter]
-            The field to be accessed.
-        type : Union[pa.DataType, None], optional
-            The type of the field, by default None.
-        preprocessor : Union[callable, None], optional
-            A function to preprocess the field, by default None.
-        """
-        if isinstance(field, tuple):
-            field = itemgetter(*field)
-        elif isinstance(field, str):
-            field = itemgetter(field)
-        super().__init__(pyarrow_field(*field._items))
-        self.getter = field
-        self.type = type
-        self.preprocessor = preprocessor
-
-    def __call__(self, data: Mapping[str, Any]) -> Any:
-        """Get the value of the field.
-
-        Parameters
-        ----------
-        data : dict
-            The data to be accessed.
-        """
-        if self.preprocessor is not None:
-            return self.preprocessor(self.getter(data))
-        return self.getter(data)
-
-
-def field(
-    field: Union[str, itemgetter, Field],
-    /,
-    type: Union[pa.DataType, None] = None,
-    preprocessor: Union[callable, None] = None,
-) -> Field:
-    """Create a new field getter."""
-    return Field(field, type=type, preprocessor=preprocessor)
-
-
-def scalar(cls, value: Any) -> Expression:
+def scalar(value: Any) -> Expression:
     """
     Create an expression from a scalar.
 
@@ -356,4 +274,4 @@ def scalar(cls, value: Any) -> Expression:
     Expression
         The expression representing the scalar.
     """
-    return cls(pyarrow_scalar(value))
+    return Expression(pyarrow_scalar(value))

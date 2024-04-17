@@ -26,7 +26,9 @@ from octoflow.data.base import BaseDatasetLoader
 logger = logging.get_logger(__name__)
 
 P = ParamSpec("P")
+
 R = TypeVar("R")
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 loaders: Dict[str, DatasetLoader] = {}

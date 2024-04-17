@@ -1,9 +1,11 @@
 import itertools
+from contextlib import suppress
 from typing import Any, Dict, Generator, Optional, Tuple, TypeVar
 
 import pyarrow as pa
 from typing_extensions import Self
 
+from octoflow.data import types
 from octoflow.data.metadata import unify_metadata
 from octoflow.data.types import infer_type, unify_types
 from octoflow.exceptions import ValidationError
@@ -16,43 +18,14 @@ __all__ = [
 T = TypeVar("T")
 
 
-class SchemaBuilder:
-    def __init__(self):
-        self._fields = {}
-        # Keys and values must be coercible to bytes.
-        self.metadata = None
-
-    def has_field(self, name: str) -> bool:
-        return name in self._fields
-
-    def get_field(self, name: str) -> pa.Field:
-        return self._fields[name]
-
-    def update_field(
-        self,
-        name: str,
-        dtype: pa.DataType,
-        nullable: bool = True,
-        metadata: Optional[Dict[str, Any]] = None,
-    ):
-        self._fields[name] = pa.field(name, dtype, nullable, metadata)
-
-    def remove_field(self, name: str):
-        del self._fields[name]
-
-    def build(self) -> pa.Schema:
-        fields = list(self._fields.values())
-        return pa.schema(fields, metadata=self.metadata)
-
-
 def unify_schemas(this: pa.Schema, other: Optional[pa.Schema]) -> pa.Schema:
     if other is None:
         return this
-    builder = SchemaBuilder()
+    _fields = {}
     this_schema_fields = set()
     for this_field in this:
         this_field_name = this_field.name
-        builder.update_field(
+        _fields[this_field.name] = pa.field(
             this_field.name,
             this_field.type,
             this_field.nullable,
@@ -62,8 +35,8 @@ def unify_schemas(this: pa.Schema, other: Optional[pa.Schema]) -> pa.Schema:
     for other_field in other:
         other_field_name = other_field.name
         this_schema_fields.discard(other_field_name)
-        if builder.has_field(other_field_name):
-            this_field = builder.get_field(other_field_name)
+        if other_field_name in _fields:
+            this_field = _fields[other_field_name]
             try:
                 promoted_type = unify_types(this_field.type, other_field.type)
             except ValueError as ex:
@@ -79,37 +52,40 @@ def unify_schemas(this: pa.Schema, other: Optional[pa.Schema]) -> pa.Schema:
                 or other_field.type.equals(pa.null())
             )
             metadata = unify_metadata(this_field, other_field)
-            builder.update_field(
+            _fields[other_field_name] = pa.field(
                 other_field_name,
                 promoted_type,
                 nullable,
                 metadata,
             )
         else:
-            builder.update_field(
+            _fields[other_field_name] = pa.field(
                 other_field_name,
                 other_field.type,
                 True,  # nullable because this field is not in the existing
                 other_field.metadata,
             )
     for this_field_name in this_schema_fields:
-        this_field = builder.get_field(this_field_name)
-        builder.update_field(
+        this_field = _fields[this_field_name]
+        _fields[this_field_name] = pa.field(
             this_field_name,
             this_field.type,
             True,  # nullable because this field is not in the other schema
             this_field.metadata,
         )
-    builder.metadata = unify_metadata(this, other)
-    return builder.build()
+    metadata = unify_metadata(this, other)
+    return pa.schema(list(_fields.values()), metadata=metadata)
 
 
-def infer_schema(data: Dict[str, Any]) -> Self:
-    schema_builder = SchemaBuilder()
+def infer_schema(
+    data: Dict[str, Any],
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Self:
+    _fields = {}
     for key, value in data.items():
-        pa_type = infer_type(value)
-        schema_builder.update_field(key, pa_type)
-    return schema_builder.build()
+        dtype = infer_type(value)
+        _fields[key] = pa.field(key, dtype, True, None)
+    return pa.schema(list(_fields.values()), metadata=metadata)
 
 
 def validate(schema: pa.Schema, data: dict) -> bool:
@@ -146,14 +122,70 @@ def validate(schema: pa.Schema, data: dict) -> bool:
 
 
 def get_schema(data: T) -> Tuple[T, pa.Schema]:
-    try:
+    """
+    Extracts the schema from a PyArrow schema or a generator of PyArrow
+    record batches.
+
+    Parameters
+    ----------
+    data : Any
+        The PyArrow schema or generator of record batches.
+
+    Returns
+    -------
+    Tuple[Any, pa.Schema]
+        The data and the schema.
+    """
+    with suppress(AttributeError):
         return data, data.schema
-    except AttributeError as e:
-        if not isinstance(data, Generator):
-            msg = (
-                "expected data to be of type 'Generator', "
-                f"got '{data.__class__.__name__}'"
+    if isinstance(data, Generator):
+        data, _data = itertools.tee(data)
+        try:
+            return data, next(_data).schema
+        except StopIteration:
+            return data, pa.schema([])
+    msg = (
+        "expected data to be of type 'Generator', "
+        f"got '{data.__class__.__name__}'"
+    )
+    raise TypeError(msg)
+
+
+def from_dataclass(cls: T) -> pa.Schema:
+    """
+    Converts a dataclass to a PyArrow schema.
+
+    Parameters
+    ----------
+    cls : Type[T]
+        The dataclass to convert.
+
+    Returns
+    -------
+    pa.Schema
+        The PyArrow schema.
+
+    Examples
+    --------
+    >>> import dataclasses
+    >>> @dataclasses.dataclass
+    ... class Record:
+    ...     id: int
+    ...     name: str
+    >>> from_dataclass(Record)
+    pyarrow.Schema([...])
+    """
+    fields = []
+    for field in cls.__dataclass_fields__.values():
+        nullable = True
+        if hasattr(field, "nullable"):
+            nullable = field.nullable
+        fields.append(
+            pa.field(
+                field.name,
+                types.from_dtype(field.type),
+                nullable,
+                None,
             )
-            raise TypeError(msg) from e
-        data, data_ = itertools.tee(data)
-        return data, next(data_).schema
+        )
+    return pa.schema(fields)
