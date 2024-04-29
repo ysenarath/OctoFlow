@@ -3,8 +3,6 @@ from __future__ import annotations
 import dataclasses as dc
 import functools
 from typing import (
-    TYPE_CHECKING,
-    Annotated,
     Any,
     Generic,
     Mapping,
@@ -12,7 +10,6 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    overload,
 )
 
 import pyarrow.dataset as ds
