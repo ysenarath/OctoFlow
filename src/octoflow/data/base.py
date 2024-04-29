@@ -6,12 +6,12 @@ import pyarrow.dataset as ds
 from typing_extensions import ParamSpec
 
 __all__ = [
-    "PyArrowWrapper",
-    "BaseExpression",
-    "BaseDataset",
-    "BaseDatasetLoader",
     "DEFAULT_BATCH_SIZE",
     "DEFAULT_FORMAT",
+    "BaseDataset",
+    "BaseDatasetLoader",
+    "BaseExpression",
+    "PyArrowWrapper",
 ]
 
 ArrowType = TypeVar("ArrowType")
@@ -27,7 +27,15 @@ DEFAULT_FORMAT: Final[str] = "arrow"
 
 class PyArrowWrapper(Generic[ArrowType]):
     def __init__(self, wrapped: ArrowType) -> None:
-        self._wrapped = wrapped
+        self._wrapped_ = wrapped
+
+    @property
+    def _wrapped(self) -> ArrowType:
+        return self._wrapped_
+
+    @_wrapped.setter
+    def _wrapped(self, value: ArrowType) -> None:
+        self._wrapped_ = value
 
     def to_pyarrow(self) -> ArrowType:
         return self._wrapped

@@ -13,16 +13,16 @@ from octoflow.data.metadata import unify_metadata
 try:
     from typing import _TypedDictMeta
 except ImportError:
-    from typing_extensions import _TypedDictMeta
+    from typing_extensions import _TypedDictMeta  # noqa: PLC2701
 
 
 __all__ = [
     "MonthDayNano",
-    "undefined",
-    "is_undefined",
     "from_dtype",
-    "unify_types",
     "infer_type",
+    "is_undefined",
+    "undefined",
+    "unify_types",
 ]
 
 

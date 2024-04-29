@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import dataclasses as dc
 import functools
-from dataclasses import Field, dataclass, field
 from typing import (
+    TYPE_CHECKING,
+    Annotated,
     Any,
     Generic,
     Mapping,
@@ -11,6 +12,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    overload,
 )
 
 import pyarrow.dataset as ds
@@ -28,38 +30,9 @@ __all__ = [
 T = TypeVar("T")
 
 
-@dataclass_transform(field_specifiers=(Field, field))
-class ModelMeta(type):
-    def __new__(cls, name, bases, attrs, **kwargs):
-        cls = super().__new__(cls, name, bases, attrs)
-        table: Optional[Table] = kwargs.get(
-            "table", getattr(cls, "__table__", None)
-        )
-        if table is not None and not hasattr(cls, "__table__"):
-            cls.__table__ = table
-        cls = dataclass(cls)
-        registry: registry_cls = kwargs.get("registry", None)
-        if table is not None and registry is not None:
-            return registry.mapped(cls)
-        return cls
-
-    def update_forward_refs(cls, **kwargs: Any) -> None:
-        # update forward references in all subclasses
-        for subclass in cls.__subclasses__():
-            subclass.update_forward_refs(**kwargs)
-            # update forward references in type hints
-        for name, value in get_type_hints(cls, localns=kwargs).items():
-            cls.__annotations__[name] = value
-
-
-class BaseModel(metaclass=ModelMeta):
-    def __post_init__(self):
-        pass
-
-
-class Field(Expression, dc.Field):
-    def __new__(
-        cls,
+class Field(dc.Field, Expression):
+    def __init__(
+        self,
         name: Optional[str] = None,
         *,
         default=dc.MISSING,
@@ -71,12 +44,11 @@ class Field(Expression, dc.Field):
         metadata=None,
         kw_only=dc.MISSING,
     ):
+        """Initialize a field getter."""
         if default is not dc.MISSING and default_factory is not dc.MISSING:
             msg = "cannot specify both default and default_factory"
             raise ValueError(msg)
-        self = dc.Field.__new__(cls)
-        dc.Field.__init__(
-            self,
+        super().__init__(
             default=default,
             default_factory=default_factory,
             init=init,
@@ -86,17 +58,14 @@ class Field(Expression, dc.Field):
             metadata=metadata,
             kw_only=kw_only,
         )
-        return self
-
-    def __init__(self, name: Optional[str] = None, *args, **kwargs):
-        """Initialize a field getter."""
         self.name = name
-        super().__init__(None)
+        # will be initialized when accessed
+        Expression.__init__(self, ...)
 
     @property
     def _wrapped(self) -> ds.Expression:
         """Get the wrapped field."""
-        if self._wrapped_ is None:
+        if self._wrapped_ is ...:
             self._wrapped_ = ds.field(self.name)
         return self._wrapped_
 
@@ -122,13 +91,78 @@ def field(*args, **kwargs) -> Field:
     return Field(*args, **kwargs)
 
 
-class FieldAccessor(Generic[T]):
-    def __init__(self, obj: Type[T]) -> None:
-        self._fields = obj
+@functools.wraps(dc.field)
+def field_from_dataclass_field(field: dc.Field) -> Field:
+    """Create a new field getter."""
+    return Field(
+        name=field.name,
+        default=field.default,
+        default_factory=field.default_factory,
+        init=field.init,
+        repr=field.repr,
+        hash=field.hash,
+        compare=field.compare,
+        metadata=field.metadata,
+        kw_only=field.kw_only,
+    )
 
-    def __getattr__(self, __name: str) -> Field:
-        return self._fields.__dataclass_fields__[__name]
+
+class FieldAccessor(tuple, Generic[T]):
+    def __new__(cls, obj: Type[T]) -> FieldAccessor[T]:
+        values = []
+        field_idx_map = {}
+        for idx, field in enumerate(dc.fields(obj)):
+            values.append(field)
+            field_idx_map[field.name] = idx
+        self = super().__new__(cls, tuple(values))
+        self._field_idx_map = field_idx_map
+        return self
+
+    def __getattr__(self, name: str) -> Field:
+        return self[self._field_idx_map[name]]
 
 
-def fieldset(cls: Type[T]) -> Union[FieldAccessor[T], T]:
+def fields(
+    cls: Type[T],
+) -> Union[FieldAccessor[T], Type[T]]:
     return FieldAccessor(cls)
+
+
+@dataclass_transform(field_specifiers=(Field, field))
+class ModelMeta(type):
+    def __new__(mcs, name, bases, attrs, **kwargs):  # noqa: N804
+        # create empty field if not defined
+        if "__annotations__" in attrs:
+            annotations: dict = attrs["__annotations__"]
+            for attr, _ in annotations.items():
+                if attr not in attrs:
+                    # create empty field - need so that dataclass
+                    # will not create it's default field
+                    attrs[attr] = field()
+                elif isinstance(attrs[attr], dc.Field):
+                    # convert dataclass-field to field
+                    attrs[attr] = field_from_dataclass_field(attrs[attr])
+        cls = super().__new__(mcs, name, bases, attrs)
+        table: Optional[Table] = kwargs.get(
+            "table", getattr(cls, "__table__", None)
+        )
+        if table is not None and not hasattr(cls, "__table__"):
+            cls.__table__ = table
+        cls = dc.dataclass(cls)
+        registry: registry_cls = kwargs.get("registry", None)
+        if table is not None and registry is not None:
+            return registry.mapped(cls)
+        return cls
+
+    def update_forward_refs(cls, **kwargs: Any) -> None:
+        # update forward references in all subclasses
+        for subclass in cls.__subclasses__():
+            subclass.update_forward_refs(**kwargs)
+            # update forward references in type hints
+        for name, value in get_type_hints(cls, localns=kwargs).items():
+            cls.__annotations__[name] = value
+
+
+class BaseModel(metaclass=ModelMeta):
+    def __post_init__(self):
+        pass

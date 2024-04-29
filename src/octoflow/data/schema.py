@@ -1,3 +1,4 @@
+import functools
 import itertools
 from contextlib import suppress
 from typing import Any, Dict, Generator, Optional, Tuple, TypeVar
@@ -11,8 +12,8 @@ from octoflow.data.types import infer_type, unify_types
 from octoflow.exceptions import ValidationError
 
 __all__ = [
-    "unify_schemas",
     "infer_schema",
+    "unify_schemas",
 ]
 
 T = TypeVar("T")
@@ -189,3 +190,21 @@ def from_dataclass(cls: T) -> pa.Schema:
             )
         )
     return pa.schema(fields)
+
+
+@functools.wraps(from_dataclass)
+def get_schema_from_dataclass(*args, **kwargs) -> pa.Schema:
+    """
+    Alias for `from_dataclass`.
+
+    Examples
+    --------
+    >>> import dataclasses
+    >>> @dataclasses.dataclass
+    ... class Record:
+    ...     id: int
+    ...     name: str
+    >>> get_schema_from_dataclass(Record)
+    pyarrow.Schema([...])
+    """
+    return from_dataclass(*args, **kwargs)

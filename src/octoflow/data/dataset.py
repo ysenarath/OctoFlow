@@ -31,9 +31,10 @@ from tqdm import auto as tqdm
 
 from octoflow import logging
 from octoflow.data.base import DEFAULT_BATCH_SIZE, DEFAULT_FORMAT, BaseDataset
+from octoflow.data.dataclass import BaseModel
 from octoflow.data.expression import Expression
 from octoflow.data.loaders import DatasetLoader, loaders
-from octoflow.data.schema import get_schema
+from octoflow.data.schema import get_schema, get_schema_from_dataclass
 from octoflow.utils import cache, hashutils
 
 logger = logging.get_logger(__name__)
@@ -95,7 +96,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         ] = None,
         format: str = DEFAULT_FORMAT,
         *,
-        schema: Optional[pa.Schema] = None,
+        schema: Union[pa.Schema, BaseModel, None] = None,
         path: Optional[Union[str, Path]] = None,
         cache_dir: Optional[Union[str, Path]] = None,
         loader_args: Optional[Tuple[Any, ...]] = None,
@@ -138,6 +139,8 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             path = generate_unique_path(data_or_loader, cache_dir=cache_dir)
         if format is None:
             format = DEFAULT_FORMAT
+        if isinstance(schema, type) and issubclass(schema, BaseModel):
+            schema = get_schema_from_dataclass(schema)
         created = write_dataset(path, data, schema=schema, format=format)
         if not created:
             msg = (
@@ -585,14 +588,11 @@ def write_dataset(
     # write to a temporary directory first
     # and then move the data to the desired
     # directory
-    ds.write_dataset(
-        data
-        if isinstance(data, (ds.Dataset, ds.Scanner))
-        else record_batch(data),
-        temp_path,
-        schema=schema,
-        format=format,
-    )
+    if not isinstance(data, (ds.Dataset, ds.Scanner)):
+        data = record_batch(data, schema=schema)
+    if isinstance(data, pa.RecordBatchReader):
+        schema = None
+    ds.write_dataset(data, temp_path, schema=schema, format=format)
     try:
         os.replace(temp_path, out_data_path)
     except OSError:
@@ -648,25 +648,31 @@ def generate_unique_path(
     return path
 
 
-def record_batch(data: Any) -> Union[pa.RecordBatch, pa.RecordBatchReader]:
+def record_batch(
+    data: Any, schema: Optional[pa.Schema] = None
+) -> Union[pa.RecordBatch, pa.RecordBatchReader]:
     # if generator, return a generator
     if isinstance(data, pa.RecordBatch):
         return data
     if isinstance(data, Generator):
-        data = (record_batch(d) for d in data)
-        data, schema = get_schema(data)
+        # Note: generator of batches not instances
+        data = (record_batch(d, schema=schema) for d in data)
+        if schema is None:
+            data, schema = get_schema(data)
         return pa.RecordBatchReader.from_batches(schema, data)
     if isinstance(data, pa.Table):
         # zero-copy
+        if schema is None:
+            schema = data.schema
         return pa.RecordBatchReader.from_batches(
-            data.schema, (d for d in data.to_batches())
+            schema, (d for d in data.to_batches())
         )
     if isinstance(data, pd.DataFrame):
-        return pa.RecordBatch.from_pandas(data)
+        return pa.RecordBatch.from_pandas(data, schema=schema)
     if isinstance(data, Mapping):
-        return pa.RecordBatch.from_pydict(data)
+        return pa.RecordBatch.from_pydict(data, schema=schema)
     if isinstance(data, Sequence) and not isinstance(data, str):
-        return pa.RecordBatch.from_pylist(list(data))
+        return pa.RecordBatch.from_pylist(list(data), schema=schema)
     dtype = data.__class__.__name__
     msg = (
         f"expected data to be of type 'pa.RecordBatch', 'pa.Table', "
