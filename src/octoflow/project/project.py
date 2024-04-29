@@ -3,7 +3,7 @@ from __future__ import annotations
 import weakref
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Generator, Mapping, Optional, Set, Tuple, Union
+from typing import Generator, Mapping, Optional, Set, Union
 
 from git import Repo
 
