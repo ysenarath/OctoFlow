@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import contextvars
 import weakref
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import Generator, Optional, Set, Union
+from typing import Generator, Mapping, Optional, Set, Tuple, Union
 
 from git import Repo
 
@@ -19,9 +18,6 @@ from octoflow.utils.rsync import rsync
 logger = logging.get_logger(__name__)
 
 
-run_var = contextvars.ContextVar[Optional[Run]]("run", default=None)
-
-
 class ProjectExperiment:
     def __init__(self, project: Project, expr_name: str) -> None:
         self.get_project = weakref.ref(project)
@@ -31,12 +27,11 @@ class ProjectExperiment:
     def project(self) -> Project:
         return self.get_project()
 
-    @contextmanager
     def start_run(
         self,
         force: bool = False,
         description: Optional[str] = None,
-    ) -> Generator[Run, None, None]:
+    ) -> Run:
         commit_hash = self.project.sync()
         tracking_uri_path = (
             self.project.base_path
@@ -58,7 +53,7 @@ class ProjectExperiment:
         return expr.start_run(commit_hash, description=description)
 
 
-class ProjectExperimentDict:
+class ProjectExperimentDict(Mapping[str, ProjectExperiment]):
     def __init__(self, project: Project) -> None:
         self.get_project = weakref.ref(project)
 
@@ -74,11 +69,9 @@ class ProjectExperimentDict:
 
     @property
     def names(self) -> Set[str]:
-        return set(
-            self.experiments_path.iterdir()
-            if self.experiments_path.exists()
-            else []
-        )
+        if self.experiments_path.exists():
+            set(self.experiments_path.iterdir())
+        return set()
 
     def __iter__(self):
         yield from self.names
@@ -95,17 +88,40 @@ class ProjectExperimentDict:
     def __repr__(self) -> str:
         return f"ExperimentDict({self.project.base_path})"
 
+    def first(self) -> ProjectExperiment:
+        try:
+            return next(iter(self.values()))
+        except StopIteration:
+            msg = "no experiments found"
+            raise KeyError(msg) from None
+
+
+def update_project_gitgnore(path: Path) -> None:
+    gitignore_path = path / ".gitignore"
+    if not gitignore_path.exists():
+        gitignore_path.write_text("# octoflow\n.octoflow\n")
+    else:
+        gitignore_text = gitignore_path.read_text().rstrip()
+        if "# octoflow" in gitignore_text:
+            return
+        gitignore_text += "\n# octoflow\n.octoflow\n"
+        gitignore_path.write_text(gitignore_text.strip())
+
 
 class Project:
     def __init__(self, path: Union[str, Path]) -> None:
-        # Initialize the project path
         path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
-        # name of the project - different from name of experiment
         self.name = path.name
         self.base_path = path / ".octoflow"
+        # update the gitignore file
+        update_project_gitgnore(path)
+        self.base_path.mkdir(parents=True, exist_ok=True)
+        self.sync()
+
+    @contextmanager
+    def get_repo(self) -> Generator[Repo, None, None]:
         # Initialize the git repository
-        repo = Repo.init(self.base_path / "project.git")
+        repo = Repo.init(self.base_path / "project")
         # commit the initial changes to main if there are no commits
         has_no_commits = True
         with suppress(StopIteration, ValueError):
@@ -114,14 +130,15 @@ class Project:
         if has_no_commits:
             repo.index.add("*")
             repo.index.commit("Initialize project")
-        self.repo = repo
-        self.sync()
+        # close the repo to avoid memory leaks
+        yield repo
+        repo.close()
 
     def sync(self, message: Optional[str] = None) -> str:
         # use rsync to copy the project structure
         for cout in rsync(
             self.base_path.parent,
-            self.base_path / "project.git",
+            self.base_path / "project",
             exclude=[
                 ".git",
                 ".gitignore",
@@ -130,14 +147,17 @@ class Project:
             append_dir=False,
         ):
             logger.info(cout)
-        # Commit the changes to the experiment branch
-        if "nothing to commit" in self.repo.git.status():
-            return self.repo.git.rev_parse("HEAD")
-        self.repo.index.add("*")
-        if message is None:
-            message = "Update project"
-        self.repo.index.commit(message)
-        return self.repo.git.rev_parse("HEAD")
+        with self.get_repo() as repo:
+            # Commit the changes to the experiment branch
+            if "nothing to commit" in repo.git.status():
+                commit_hash = repo.git.rev_parse("HEAD")
+            else:
+                repo.index.add("*")
+                if message is None:
+                    message = "Update project"
+                repo.index.commit(message)
+            commit_hash = repo.git.rev_parse("HEAD")
+        return commit_hash
 
     @property
     def experiments(self):
