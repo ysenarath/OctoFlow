@@ -8,15 +8,16 @@ from octoflow.utils.config import Config
 __version__ = "0.0.42"
 
 __all__ = [
-    "TrackingClient",
-    "Experiment",
-    "Run",
-    "Value",
     "Config",
+    "Experiment",
     "LoggingFactory",
-    "logging",
-    "logger",
+    "Run",
+    "TrackingClient",
+    "Value",
     "config",
+    "logger",
+    "logging",
+    "server",
 ]
 
 # create the octoflow root logger
