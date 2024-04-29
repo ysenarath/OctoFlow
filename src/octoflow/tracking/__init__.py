@@ -5,8 +5,8 @@ from octoflow.tracking.store import TrackingStore
 __all__ = [
     "Experiment",
     "Run",
-    "Value",
+    "SQLAlchemyTrackingStore",
     "TrackingClient",
     "TrackingStore",
-    "SQLAlchemyTrackingStore",
+    "Value",
 ]
