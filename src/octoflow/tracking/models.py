@@ -292,7 +292,7 @@ class TreeNode(UserDict):
                 temp = tree[key]
                 if not isinstance(temp, TreeNode) or not temp.is_nested:
                     msg = (
-                        "expected nested 'TreeNode' for key path '{key_path}'"
+                        f"expected nested 'TreeNode' for key path '{key_path}'"
                     )
                     msg += f", got '{type(temp).__name__}'"
                     raise ValueError(msg)
