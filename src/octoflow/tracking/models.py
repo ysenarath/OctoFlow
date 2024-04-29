@@ -31,9 +31,9 @@ from octoflow.utils.collections import flatten
 __all__ = [
     "Experiment",
     "Run",
+    "TrackingStore",
     "Value",
     "Variable",
-    "TrackingStore",
 ]
 
 JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
