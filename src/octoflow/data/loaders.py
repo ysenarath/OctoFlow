@@ -246,7 +246,7 @@ def load_json(
         path = Path(path)
     if path.is_dir():
         logger.info("loading all .json files in the directory '%s'", path)
-        path = path / "*.json"
+        path /= "*.json"
     for p in glob.iglob(str(path)):
         with open(p, encoding=encoding) as f:
             yield json.load(f)
@@ -282,7 +282,7 @@ def load_jsonl(
     )
     if path.is_dir():
         logger.info("Loading all .jsonl files in the directory '%s'", path)
-        path = path / "*.jsonl"
+        path /= "*.jsonl"
     for p in glob.iglob(str(path)):
         with open(p, encoding=encoding) as f:
             yield [json.loads(line) for line in f]
@@ -316,7 +316,7 @@ def load_csv(
         path = Path(path)
     if path.is_dir():
         logger.info("loading all .csv files in the directory '%s'", path)
-        path = path / "*.csv"
+        path /= "*.csv"
     for p in glob.iglob(str(path)):
         p = Path(p)
         if p.suffix == ".tsv":
