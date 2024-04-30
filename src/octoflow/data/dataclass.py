@@ -100,7 +100,7 @@ def field_from_dataclass_field(field: dc.Field) -> Field:
         hash=field.hash,
         compare=field.compare,
         metadata=field.metadata,
-        kw_only=field.kw_only,
+        kw_only=field.kw_only if hasattr(field, "kw_only") else dc.MISSING,
     )
 
 
@@ -136,9 +136,15 @@ class ModelMeta(type):
                     # create empty field - need so that dataclass
                     # will not create it's default field
                     attrs[attr] = field()
+                elif isinstance(attrs[attr], Field):
+                    # do not need further processing
+                    attrs[attr] = attrs[attr]
                 elif isinstance(attrs[attr], dc.Field):
                     # convert dataclass-field to field
                     attrs[attr] = field_from_dataclass_field(attrs[attr])
+                else:
+                    # create field with default value
+                    attrs[attr] = field(default=attrs[attr])
         cls = super().__new__(mcs, name, bases, attrs)
         table: Optional[Table] = kwargs.get(
             "table", getattr(cls, "__table__", None)
