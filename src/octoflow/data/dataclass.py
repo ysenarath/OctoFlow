@@ -45,6 +45,11 @@ class Field(dc.Field, Expression):
         if default is not dc.MISSING and default_factory is not dc.MISSING:
             msg = "cannot specify both default and default_factory"
             raise ValueError(msg)
+        kwargs = {}
+        if kw_only is not dc.MISSING:
+            # if python >= 3.10 => should be
+            # explicitly passed
+            kwargs["kw_only"] = kw_only
         super().__init__(
             default=default,
             default_factory=default_factory,
@@ -53,7 +58,7 @@ class Field(dc.Field, Expression):
             hash=hash,
             compare=compare,
             metadata=metadata,
-            kw_only=kw_only,
+            **kwargs,
         )
         self.name = name
         # will be initialized when accessed
@@ -91,6 +96,10 @@ def field(*args, **kwargs) -> Field:
 @functools.wraps(dc.field)
 def field_from_dataclass_field(field: dc.Field) -> Field:
     """Create a new field getter."""
+    kwargs = {}
+    if hasattr(field, "kw_only"):
+        # if python >= 3.10 => should be
+        kwargs["kw_only"] = field.kw_only
     return Field(
         name=field.name,
         default=field.default,
@@ -100,7 +109,7 @@ def field_from_dataclass_field(field: dc.Field) -> Field:
         hash=field.hash,
         compare=field.compare,
         metadata=field.metadata,
-        kw_only=field.kw_only if hasattr(field, "kw_only") else dc.MISSING,
+        **kwargs,
     )
 
 
