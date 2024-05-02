@@ -35,7 +35,8 @@ from octoflow.data.dataclass import BaseModel
 from octoflow.data.expression import Expression
 from octoflow.data.loaders import DatasetLoader, loaders
 from octoflow.data.schema import get_schema, get_schema_from_dataclass
-from octoflow.utils import cache, hash
+from octoflow.utils import hashutils
+from octoflow.utils.cacheutils import cache
 
 logger = logging.get_logger(__name__)
 
@@ -357,7 +358,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         Dataset
             A new dataset containing the mapped rows.
         """
-        fingerprint = hash.hash(func)
+        fingerprint = hashutils.hash(func)
         path = self.path / f"map-{fingerprint}"
         num_batches = ((self.count_rows() - 1) // batch_size) + 1
         batch_iter = self._wrapped.to_batches(batch_size=batch_size)
@@ -412,7 +413,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         if expression is None:
             return self
         pyarrow_expression = expression.to_pyarrow()
-        fingerprint = hash.hash(pyarrow_expression)
+        fingerprint = hashutils.hash(pyarrow_expression)
         path = self.path / f"filter-{fingerprint}"
         dataset = self._wrapped.filter(pyarrow_expression)
         state = write_dataset(
@@ -448,7 +449,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         """
         if isinstance(columns, str):
             columns = [columns]
-        fingerprint = hash.hash(columns)
+        fingerprint = hashutils.hash(columns)
         path = self.path / f"select-{fingerprint}"
         scanner = ds.Scanner.from_dataset(
             self._wrapped,
@@ -636,7 +637,7 @@ def generate_unique_path(
             msg = f"failed to create cache directory at '{cache_dir}'"
             raise OSError(msg) from e
     try:
-        fingerprint = hash.hash(reference)
+        fingerprint = hashutils.hash(reference)
         path = cache_dir / f"data-{fingerprint}"
     except Exception as e:
         # an error occurred while hashing data
