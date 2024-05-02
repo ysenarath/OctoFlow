@@ -14,16 +14,16 @@ __all__ = [
 class Cache:
     def __init__(self, path: Union[str, Path, None] = None) -> None:
         if isinstance(path, str):
-            path = Path(path).expanduser()
+            path = Path(path)
         if path is None:
             with suppress(AttributeError):
                 path = config.resources.cache.path
         if path is None:
             with suppress(AttributeError):
-                path = Path(config.resources.path).expanduser() / "cache"
+                path = config.resources.path / "cache"
         if path is None:
             path = Path(tempfile.gettempdir()) / "octoflow" / "cache"
-        self._path = path
+        self._path = path.expanduser().resolve()
 
     @property
     def path(self) -> Path:

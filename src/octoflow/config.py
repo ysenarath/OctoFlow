@@ -14,17 +14,10 @@ class CacheConfig:
 
 
 @dataclass
-class DataConfig:
-    path: Path = "${oc.select:resources.path}/data"
-
-
-@dataclass
 class ResourcesConfig:
     path: Path = "~/.octoflow"
     # for user data
     cache: CacheConfig = field(default_factory=CacheConfig)
-    # for octoflow data ???
-    data: DataConfig = field(default_factory=DataConfig)
 
 
 @dataclass

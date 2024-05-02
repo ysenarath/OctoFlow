@@ -137,7 +137,10 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         else:
             data = data_or_loader
         if path is None:
+            # path resulted in here is user expanded and resolved
             path = generate_unique_path(data_or_loader, cache_dir=cache_dir)
+        else:
+            path = Path(path).expanduser().resolve()
         if force:
             shutil.rmtree(path, ignore_errors=True)
         if format is None:
@@ -566,29 +569,22 @@ def write_dataset(
     schema: pa.Schema = None,
     format: Optional[str] = None,
 ) -> bool:
-    if isinstance(path, str):
-        path = Path(path)
+    path = Path(path).expanduser().resolve()
     if not path.exists():
         path.mkdir(
             parents=True,
             exist_ok=True,
         )
-    out_data_path = get_data_path(path)
-    if out_data_path.exists():
-        return False
     # first write to temporary directory
-    # it might take some time to write the data
-    # within that time, another process might try
-    # to read the data or write the data so we
-    # write to a temporary directory first
-    # and then move the data to the desired
-    # directory
     temp_path = Path(
         tempfile.mkdtemp(
             prefix=".temp-",
             dir=path,
         )
     )
+    out_data_path = get_data_path(path)
+    if out_data_path.exists():
+        return False
     if isinstance(schema, type) and issubclass(schema, BaseModel):
         schema = get_schema_from_dataclass(schema)
     if not isinstance(data, (ds.Dataset, ds.Scanner)):
@@ -597,13 +593,14 @@ def write_dataset(
         schema = None
     ds.write_dataset(data, temp_path, schema=schema, format=format)
     try:
-        os.replace(temp_path, out_data_path)
+        os.rename(temp_path, out_data_path)
     except FileExistsError:
         return False
     return True
 
 
 def read_dataset(path: Union[str, Path], format: str) -> ds.dataset:
+    path = Path(path).expanduser().resolve()
     data_path = get_data_path(path)
     return ds.dataset(
         data_path,
@@ -611,9 +608,8 @@ def read_dataset(path: Union[str, Path], format: str) -> ds.dataset:
     )
 
 
-def get_data_path(path: Union[Path, str]) -> Path:
-    if isinstance(path, str):
-        path = Path(path)
+def get_data_path(path: Union[str, Path]) -> Path:
+    path = Path(path).expanduser().resolve()
     if path.is_dir() or not path.exists():
         path.mkdir(parents=True, exist_ok=True)
         data_path = path / "data"
@@ -625,12 +621,13 @@ def get_data_path(path: Union[Path, str]) -> Path:
 
 def generate_unique_path(
     reference: Any,
-    cache_dir: Optional[Union[str, Path]] = None,
+    cache_dir: Union[str, Path, None] = None,
 ) -> Path:
     # create a temporary directory in system temp directory
     if cache_dir is None:
         cache_dir = cache.path / "datasets"
-    if cache_dir is not None and not cache_dir.exists():
+    cache_dir = Path(cache_dir).expanduser().resolve()
+    if not cache_dir.exists():
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
