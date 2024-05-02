@@ -1,8 +1,13 @@
 import re
 
+__all__ = [
+    "escape",
+    "unescape",
+]
+
 ESCAPED_CHARS = r"\\`*_{}[]()#+\-.!"
-ESCAPED_CHARS_RE = re.compile(r"([%s])" % re.escape(ESCAPED_CHARS))
-UNESCAPED_CHARS_RE = re.compile(r"\\([%s])" % re.escape(ESCAPED_CHARS))
+ESCAPED_CHARS_RE = re.compile(rf"([{re.escape(ESCAPED_CHARS)}])")
+UNESCAPED_CHARS_RE = re.compile(rf"\\([{re.escape(ESCAPED_CHARS)}])")
 
 
 def escape(text: str) -> str:
