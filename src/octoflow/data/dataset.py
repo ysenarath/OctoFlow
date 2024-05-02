@@ -35,7 +35,7 @@ from octoflow.data.dataclass import BaseModel
 from octoflow.data.expression import Expression
 from octoflow.data.loaders import DatasetLoader, loaders
 from octoflow.data.schema import get_schema, get_schema_from_dataclass
-from octoflow.utils import cache, hashutils
+from octoflow.utils import cache, hash
 
 logger = logging.get_logger(__name__)
 
@@ -87,12 +87,13 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         cache_dir: Optional[Union[str, Path]] = None,
         loader_args: Optional[Tuple[Any, ...]] = None,
         loader_kwargs: Optional[Dict[str, Any]] = None,
+        force: bool = False,
     ): ...
 
     def __init__(
         self,
         data_or_loader: Union[
-            List[dict], Dict[str, list], DataFrame, DatasetLoader
+            List[dict], Dict[str, list], DataFrame, DatasetLoader, str
         ] = None,
         format: str = DEFAULT_FORMAT,
         *,
@@ -101,14 +102,15 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         cache_dir: Optional[Union[str, Path]] = None,
         loader_args: Optional[Tuple[Any, ...]] = None,
         loader_kwargs: Optional[Dict[str, Any]] = None,
+        force: bool = False,
     ):
         """
         Create a new dataset.
 
         Parameters
         ----------
-        data_or_loader : list of dict, dict of list, DataFrame, BaseDatasetLoader
-            The data to load into the dataset.
+        data_or_loader : list of dict, dict of list, DataFrame, BaseDatasetLoader, str
+            The data to load into the dataset or the (name of) loader to use.
         format : str
             The format of the dataset.
         path : str, Path, None
@@ -129,14 +131,14 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                 loader_args = ()
             if loader_kwargs is None:
                 loader_kwargs = {}
-            data_or_loader = data_or_loader.partial(
-                *loader_args, **loader_kwargs
-            )
-            data = data_or_loader()
+            data_or_loader = data_or_loader.bind(*loader_args, **loader_kwargs)
+            data = data_or_loader()  # will result in a generator in most cases
         else:
             data = data_or_loader
         if path is None:
             path = generate_unique_path(data_or_loader, cache_dir=cache_dir)
+        if force:
+            shutil.rmtree(path, ignore_errors=True)
         if format is None:
             format = DEFAULT_FORMAT
         if isinstance(schema, type) and issubclass(schema, BaseModel):
@@ -355,7 +357,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         Dataset
             A new dataset containing the mapped rows.
         """
-        fingerprint = hashutils.hash(func)
+        fingerprint = hash.hash(func)
         path = self.path / f"map-{fingerprint}"
         num_batches = ((self.count_rows() - 1) // batch_size) + 1
         batch_iter = self._wrapped.to_batches(batch_size=batch_size)
@@ -410,7 +412,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         if expression is None:
             return self
         pyarrow_expression = expression.to_pyarrow()
-        fingerprint = hashutils.hash(pyarrow_expression)
+        fingerprint = hash.hash(pyarrow_expression)
         path = self.path / f"filter-{fingerprint}"
         dataset = self._wrapped.filter(pyarrow_expression)
         state = write_dataset(
@@ -446,7 +448,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         """
         if isinstance(columns, str):
             columns = [columns]
-        fingerprint = hashutils.hash(columns)
+        fingerprint = hash.hash(columns)
         path = self.path / f"select-{fingerprint}"
         scanner = ds.Scanner.from_dataset(
             self._wrapped,
@@ -612,10 +614,7 @@ def get_data_path(path: Union[Path, str]) -> Path:
     if isinstance(path, str):
         path = Path(path)
     if path.is_dir() or not path.exists():
-        path.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        path.mkdir(parents=True, exist_ok=True)
         data_path = path / "data"
     else:
         msg = f"expected path to be directory, got '{path}'"
@@ -637,12 +636,14 @@ def generate_unique_path(
             msg = f"failed to create cache directory at '{cache_dir}'"
             raise OSError(msg) from e
     try:
-        fingerprint = hashutils.hash(reference)
+        fingerprint = hash.hash(reference)
         path = cache_dir / f"data-{fingerprint}"
     except Exception as e:
         # an error occurred while hashing data
-        msg = "failed to create unique path, using temporary directory"
-        msg = e.args[0] if e.args else msg
+        msg = (
+            "Using temporary directory; "
+            f"Failed to create unique path due to the following error: {e}."
+        )
         logger.warning(msg)
         path = Path(tempfile.mkdtemp(dir=cache_dir))
     return path
