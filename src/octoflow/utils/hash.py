@@ -19,7 +19,9 @@ import dill  # noqa: S403
 import xxhash
 
 __all__ = [
+    "UpdateHashFunc",
     "hash",
+    "hashable",
 ]
 
 T = TypeVar("T")
@@ -32,7 +34,11 @@ class Hashable(Protocol):
 
 
 def _update_hash_header(
-    obj: Any, m: xxhash.xxh64, name: Optional[str] = None
+    m: xxhash.xxh64,
+    obj: Any,
+    *,
+    name: Optional[str] = None,
+    deep: Optional[bool] = None,
 ) -> None:
     if name is None:
         module = obj.__class__.__module__
@@ -40,92 +46,188 @@ def _update_hash_header(
             name = obj.__class__.__name__
         else:
             name = module + "." + obj.__class__.__name__
-    header = f"=={name}=="
-    m.update(header.encode("utf-8"))
+    m.update(f"==Type:{name}==".encode())
 
 
 def _update_hash_bytes(
-    obj: bytes, m: xxhash.xxh64, *, name: Optional[str] = None
+    m: xxhash.xxh64,
+    obj: bytes,
+    *,
+    name: Optional[str] = None,
+    deep: Optional[bool] = None,
 ) -> None:
-    _update_hash_header(obj, m, name=name)
+    _update_hash_header(m, obj, name=name)
     m.update(obj)
 
 
-def _update_hash_partial(
-    obj: functools.partial, m: xxhash.xxh64, *, name: Optional[str] = None
-) -> None:
-    _update_hash_header(obj, m, name=name)
-    _update_hash(obj.func, m, name="tklearn.utils.hash.PartialFunc")
-    _update_hash(obj.args, m, name="tklearn.utils.hash.PartialArgs")
-    _update_hash(obj.keywords, m, name="tklearn.utils.hash.PartialKeywords")
-
-
 def _update_hash_mapping(
-    obj: Mapping, m: xxhash.xxh64, *, name: Optional[str] = None
+    m: xxhash.xxh64,
+    obj: Mapping,
+    *,
+    name: Optional[str] = None,
+    deep: bool = False,
 ) -> None:
-    _update_hash_header(obj, m, name=name)
+    _update_hash_header(m, obj, name=name)
     for key, value in obj.items():
-        _update_hash((key, value), m, name="tklearn.utils.hash.MappingItem")
+        _update_hash(
+            m,
+            (key, value),
+            name="tklearn.utils.hash.MappingItem",
+            deep=deep,
+        )
 
 
 def _update_hash_sequence(
-    obj: Sequence, m: xxhash.xxh64, *, name: Optional[str] = None
+    m: xxhash.xxh64,
+    obj: Sequence,
+    *,
+    name: Optional[str] = None,
+    deep: bool = False,
 ) -> None:
-    _update_hash_header(obj, m, name=name)
+    _update_hash_header(m, obj, name=name)
     for item in obj:
-        _update_hash(item, m, name="tklearn.utils.hash.SequenceItem")
+        _update_hash(
+            m,
+            item,
+            name="tklearn.utils.hash.SequenceItem",
+            deep=deep,
+        )
+
+
+def _update_hash_partial(
+    m: xxhash.xxh64,
+    obj: functools.partial,
+    *,
+    name: Optional[str] = None,
+    deep: bool = False,
+) -> None:
+    _update_hash_header(m, obj, name=name)
+    _update_hash(m, obj.func)
+    _update_hash_sequence(
+        m, obj.args, name="tklearn.utils.hash.PartialArgs", deep=deep
+    )
+    _update_hash_mapping(
+        m,
+        obj.keywords,
+        name="tklearn.utils.hash.PartialKeywords",
+        deep=deep,
+    )
 
 
 def _update_hash_any(
-    obj: Any, m: xxhash.xxh64, *, name: Optional[str] = None
+    m: xxhash.xxh64,
+    obj: Any,
+    *,
+    name: Optional[str] = None,
+    deep: Optional[bool] = None,
 ) -> None:
-    _update_hash_header(obj, m, name=name)
+    _update_hash_header(m, obj, name=name)
     m.update(dill.dumps(obj))
 
 
 def _update_hash(
-    obj: Any, m: xxhash.xxh64, *, name: Optional[str] = None
+    m: xxhash.xxh64,
+    obj: Any,
+    *,
+    name: Optional[str] = None,
+    deep: bool = False,
 ) -> None:
+    """Update the hash with the object.
+
+    Parameters
+    ----------
+    m : xxhash.xxh64
+        The hash object.
+    obj : Any
+        The object to hash.
+    name : str, optional
+        The name of the object, by default None.
+    deep : bool, optional
+        Whether to hash the object recursively, by default False.
+    """
     if isinstance(obj, bytes):
-        _update_hash_bytes(obj, m, name=name)
-    elif isinstance(obj, functools.partial):
-        _update_hash_partial(obj, m, name=name)
-    elif isinstance(obj, Mapping):
-        _update_hash_mapping(obj, m, name=name)
-    elif isinstance(obj, Sequence) and not isinstance(obj, str):
-        _update_hash_sequence(obj, m, name=name)
+        _update_hash_bytes(m, obj, name=name)
     elif isinstance(obj, Hashable):
         obj._update_hash(m)
+    elif isinstance(obj, functools.partial):
+        _update_hash_partial(m, obj, name=name, deep=deep)
+    elif deep and isinstance(obj, Mapping):
+        _update_hash_mapping(m, obj, name=name, deep=deep)
+    elif deep and isinstance(obj, Sequence) and not isinstance(obj, str):
+        _update_hash_sequence(m, obj, name=name, deep=deep)
     else:
-        _update_hash_any(obj, m, name=name)
+        _update_hash_any(m, obj, name=name)
 
 
-def hash(value: Any, *, __m: Optional[xxhash.xxh64] = None) -> str:
-    m = xxhash.xxh64() if __m is None else __m
-    _update_hash(value, m)
+def update_hash(m: xxhash.xxh64, obj: Any, deep: bool = False) -> None:
+    """Update the hash with the object.
+
+    Parameters
+    ----------
+    m : xxhash.xxh64
+        The hash object.
+    obj : Any
+        The object to hash.
+    deep : bool, optional
+        Whether to hash the object recursively, by default False.
+    """
+    _update_hash(m, obj, deep=deep)
+
+
+def hash(value: Any, deep: bool = False) -> str:
+    """Hash the object.
+
+    Parameters
+    ----------
+    value : Any
+        The object to hash.
+    deep : bool, optional
+        Whether to hash the object recursively, by default False.
+
+    Returns
+    -------
+    str
+        The hash value.
+    """
+    m = xxhash.xxh64()
+    update_hash(m, value, deep=deep)
     return m.hexdigest()
 
 
 class UpdateHashFunc:
-    def __init__(self, func: Any, *, mode, version) -> None:
-        self.func = func
+    def __init__(
+        self,
+        obj: Any,
+        *,
+        mode: str,
+        version: Optional[str] = None,
+    ) -> None:
+        self.obj = obj
         self.mode = mode
         self.version = version
 
+    def _update_hash_header(self, m: xxhash.xxh64) -> None:
+        _update_hash_header(m, self.obj, name=None)
+        # add version to hash
+        version = "" if self.version is None else self.version
+        m.update(f"==Version:{version}==".encode())
+
     def __call__(self, m: xxhash.xxh64) -> None:
-        _update_hash_header(self.func, m, name=None)
+        self._update_hash_header(m)
         if self.mode == "dill":
-            val_hash = dill.dumps(self.func)
+            repr_ = dill.dumps(self.obj)
         elif self.mode in {"pickle", "pkl"}:
-            val_hash = pickle.dumps(self.func)
+            # works for pickleable objects
+            repr_ = pickle.dumps(self.obj)
         elif self.mode in {"source", "src"}:
-            val_hash = inspect.getsource(self.func).encode("utf-8")
+            # this works for functions and classes
+            repr_ = inspect.getsource(self.obj).encode("utf-8")
         elif callable(self.mode):
-            val_hash = self.mode(self.func)
+            repr_ = self.mode(self.obj)
         else:
             msg = f"invalid mode: {self.mode}"
             raise ValueError(msg)
-        m.update(val_hash)
+        m.update(repr_)
 
 
 def hashable(
@@ -134,9 +236,9 @@ def hashable(
         callable,
     ] = "dill",
     version: None[str] = None,
-    func: Optional[T] = None,
+    obj: Optional[T] = None,
 ) -> T:
-    if func is None:
+    if obj is None:
         return functools.partial(hashable, mode, version)
-    func._update_hash = UpdateHashFunc(func, mode=mode, version=version)
-    return func
+    obj._update_hash = UpdateHashFunc(obj, mode=mode, version=version)
+    return obj
