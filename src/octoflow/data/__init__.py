@@ -10,11 +10,11 @@ from octoflow.data.loaders import dataloader
 from octoflow.data.loaders import loaders as _loaders
 
 __all__ = [
-    "load_dataset",
-    "dataloader",
     "Dataset",
     "Expression",
+    "dataloader",
     "field",
+    "load_dataset",
     "scalar",
 ]
 
@@ -22,6 +22,7 @@ __all__ = [
 def load_dataset(
     __loader: str,
     __path: Optional[str],
+    __force: bool = False,
     __dataset_format: str = DEFAULT_FORMAT,
     __dataset_path: Union[Path, str, None] = None,
     /,
@@ -67,4 +68,5 @@ def load_dataset(
         path=__dataset_path,
         loader_args=args,
         loader_kwargs=kwargs,
+        force=__force,
     )
