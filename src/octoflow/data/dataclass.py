@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses as dc
 import functools
+import inspect
 from typing import (
     Any,
     Generic,
@@ -46,7 +47,7 @@ class Field(dc.Field, Expression):
             msg = "cannot specify both default and default_factory"
             raise ValueError(msg)
         kwargs = {}
-        if kw_only is not dc.MISSING:
+        if inspect.signature(dc.Field).parameters.get("kw_only") is not None:
             # if python >= 3.10 => should be
             # explicitly passed
             kwargs["kw_only"] = kw_only
