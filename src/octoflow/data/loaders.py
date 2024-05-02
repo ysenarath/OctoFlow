@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import glob
-import inspect
 import json
 from pathlib import Path
 from typing import (
@@ -22,13 +21,12 @@ from typing_extensions import ParamSpec
 
 from octoflow import logging
 from octoflow.data.base import BaseDatasetLoader
+from octoflow.utils import functions
 
 logger = logging.get_logger(__name__)
 
 P = ParamSpec("P")
-
 R = TypeVar("R")
-
 F = TypeVar("F", bound=Callable[..., Any])
 
 loaders: Dict[str, DatasetLoader] = {}
@@ -71,11 +69,26 @@ class DatasetLoader(BaseDatasetLoader):
         self.wraps = wraps
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        """
+        Call the loader function.
+
+        Parameters
+        ----------
+        args : tuple
+            The arguments to pass to the function.
+        kwargs : dict
+            The keyword arguments to pass to the function.
+
+        Returns
+        -------
+        R
+            The result of the function.
+        """
         return self.func(*args, **kwargs)
 
-    def partial(self, *args: P.args, **kwargs: P.kwargs) -> Callable[..., R]:
+    def bind(self, *args: P.args, **kwargs: P.kwargs) -> Callable[..., R]:
         """
-        Create a partial function with pre-filled arguments and keyword arguments.
+        Bind arguments to the loader function.
 
         Notes
         -----
@@ -94,11 +107,8 @@ class DatasetLoader(BaseDatasetLoader):
         -------
         Callable[..., R]
             The partial function.
-        """  # noqa: E501
-        signature = inspect.signature(self.func)
-        bound_args = signature.bind_partial(*args, **kwargs)
-        bound_args.apply_defaults()
-        return functools.partial(self, *bound_args.args, **bound_args.kwargs)
+        """
+        return functions.bind(self, *args, **kwargs)
 
 
 @overload
