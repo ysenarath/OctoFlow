@@ -142,8 +142,6 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             shutil.rmtree(path, ignore_errors=True)
         if format is None:
             format = DEFAULT_FORMAT
-        if isinstance(schema, type) and issubclass(schema, BaseModel):
-            schema = get_schema_from_dataclass(schema)
         created = write_dataset(path, data, schema=schema, format=format)
         if not created:
             msg = (
@@ -579,18 +577,20 @@ def write_dataset(
     if out_data_path.exists():
         return False
     # first write to temporary directory
-    temp_path = Path(
-        tempfile.mkdtemp(
-            prefix=".temp-",
-            dir=path,
-        )
-    )
     # it might take some time to write the data
     # within that time, another process might try
     # to read the data or write the data so we
     # write to a temporary directory first
     # and then move the data to the desired
     # directory
+    temp_path = Path(
+        tempfile.mkdtemp(
+            prefix=".temp-",
+            dir=path,
+        )
+    )
+    if isinstance(schema, type) and issubclass(schema, BaseModel):
+        schema = get_schema_from_dataclass(schema)
     if not isinstance(data, (ds.Dataset, ds.Scanner)):
         data = record_batch(data, schema=schema)
     if isinstance(data, pa.RecordBatchReader):
@@ -598,7 +598,7 @@ def write_dataset(
     ds.write_dataset(data, temp_path, schema=schema, format=format)
     try:
         os.replace(temp_path, out_data_path)
-    except OSError:
+    except FileExistsError:
         return False
     return True
 
