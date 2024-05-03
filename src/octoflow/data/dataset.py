@@ -594,7 +594,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         pl.LazyFrame
             The Polars Lazy DataFrame.
         """
-        return pl.scan_ipc(self.path / "*.arrow")
+        return pl.scan_ipc(self.path / "data" / "*.arrow")
 
 
 def gen_unique_cached_path(
