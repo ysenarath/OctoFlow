@@ -29,7 +29,7 @@ class Cache:
     def path(self) -> Path:
         return self._path
 
-    def clean(self):
+    def clear(self):
         if self.path.exists():
             shutil.rmtree(self.path)
 
