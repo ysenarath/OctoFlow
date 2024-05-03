@@ -1,8 +1,11 @@
 import time
 from typing import List, Union
 
+import pyarrow as pa
+
 from octoflow.data.dataclass import BaseModel, field
 from octoflow.data.dataset import Dataset
+from octoflow.utils.hashutils import hashable
 
 
 def generate_test_data():
@@ -46,14 +49,15 @@ start_time = time.time()
 dataset = Dataset(generate_test_data(), schema=User)
 end_time = time.time()
 
-print(f"Dataset: {dataset}; Size: {len(dataset)}")
 
-execution_time = end_time - start_time
-print("Execution time with schema:", execution_time)
+@hashable("src", version="1")
+def make_upper(table: pa.Table):
+    text_input = table.column("name").to_pylist()
+    return {"upper_name": list(map(str.upper, text_input))}
 
-start_time = time.time()
-dataset = Dataset(generate_test_data())
-end_time = time.time()
 
-execution_time = end_time - start_time
-print("Execution time without schema:", execution_time)
+dataset = dataset.map(make_upper, batched=True)
+
+dataset = dataset.rename({"name": "original_name"})
+
+print(dataset[0])
