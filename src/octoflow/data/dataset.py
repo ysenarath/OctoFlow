@@ -614,7 +614,7 @@ def gen_unique_cached_path(
     try:
         fingerprint = hashutils.hash(*refs)
         path = cache_dir / f"data-{fingerprint}"
-        path.mkdir(exist_ok=True)
+        path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         path = Path(tempfile.mkdtemp(dir=cache_dir))
         # an error occurred while hashing data
@@ -672,6 +672,7 @@ def write_dataset(
     path = Path(path).expanduser().resolve() / "data"
     if path.exists():
         return False
+    path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = Path(tempfile.mkdtemp(prefix=".temp-", dir=path.parent))
     if isinstance(schema, type) and issubclass(schema, BaseModel):
         schema = get_schema_from_dataclass(schema)
