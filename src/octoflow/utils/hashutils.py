@@ -174,7 +174,7 @@ def update_hash(m: xxhash.xxh64, obj: Any, deep: bool = False) -> None:
     _update_hash(m, obj, deep=deep)
 
 
-def hash(value: Any, deep: bool = False) -> str:
+def hash(*value: Any, deep: bool = False) -> str:
     """Hash the object.
 
     Parameters
@@ -190,7 +190,9 @@ def hash(value: Any, deep: bool = False) -> str:
         The hash value.
     """
     m = xxhash.xxh64()
-    update_hash(m, value, deep=deep)
+    _update_hash_header(m, None, name="tklearn.utils.hash.hash")
+    for item in value:
+        update_hash(m, item, deep=deep)
     return m.hexdigest()
 
 
@@ -207,7 +209,7 @@ class UpdateHashFunc:
         self.version = version
 
     def _update_hash_header(self, m: xxhash.xxh64) -> None:
-        _update_hash_header(m, self.obj, name=None)
+        _update_hash_header(m, self.obj)
         # add version to hash
         version = "" if self.version is None else self.version
         m.update(f"==Version:{version}==".encode())
