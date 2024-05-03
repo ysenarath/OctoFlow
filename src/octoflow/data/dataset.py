@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import functools
 import os
 import shutil
@@ -31,7 +30,7 @@ from tqdm import auto as tqdm
 
 from octoflow import logging
 from octoflow.data.base import DEFAULT_BATCH_SIZE, DEFAULT_FORMAT, BaseDataset
-from octoflow.data.dataclass import BaseModel
+from octoflow.data.dataclass import BaseModel, field
 from octoflow.data.expression import Expression
 from octoflow.data.loaders import DatasetLoader, loaders
 from octoflow.data.schema import get_schema, get_schema_from_dataclass
@@ -115,7 +114,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         format : str
             The format of the dataset.
         path : str, Path, None
-            The path to the dataset.
+            Load the data to this path.
         cache_dir : str, Path, None
             The directory to use for caching.
         loader_args : tuple, None
@@ -138,15 +137,15 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             data = data_or_loader
         if path is None:
             # path resulted in here is user expanded and resolved
-            path = generate_unique_path(data_or_loader, cache_dir=cache_dir)
+            path = gen_unique_cached_path(data_or_loader, cache_dir=cache_dir)
         else:
             path = Path(path).expanduser().resolve()
         if force:
             shutil.rmtree(path, ignore_errors=True)
         if format is None:
             format = DEFAULT_FORMAT
-        created = write_dataset(path, data, schema=schema, format=format)
-        if not created:
+        state = write_dataset(path, data, schema=schema, format=format)
+        if not state:
             msg = (
                 f"existing dataset found at '{path}', loading existing file(s)"
             )
@@ -155,6 +154,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         super().__init__(dataset)
         self._path = path
         self._format = format
+        self.cache_dir = cache_dir
 
     @property
     def path(self) -> Path:
@@ -179,6 +179,18 @@ class Dataset(BaseDataset):  # noqa: PLR0904
             The format of the dataset.
         """
         return self._format
+
+    @property
+    def columns(self) -> List[str]:
+        """
+        Get the names of the columns in the dataset.
+
+        Returns
+        -------
+        List[str]
+            The names of the columns in the dataset.
+        """
+        return self._wrapped.schema.names
 
     @property
     def _wrapped_format_default_extname(self) -> str:
@@ -235,7 +247,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         filter = filter.to_pyarrow() if filter else None
         if isinstance(columns, str):
             columns = [columns]
-        table: pa.Table = self._wrapped.head(
+        table = self._wrapped.head(
             num_rows=num_rows,
             columns=columns,
             filter=filter,
@@ -283,7 +295,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> Union[dict, pa.Table]:
         """
-        Take rows from the dataset.
+        Take rows(/columns) from the dataset.
 
         Parameters
         ----------
@@ -338,6 +350,8 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         func: Any,
         batch_size: int = DEFAULT_BATCH_SIZE,
         batched: bool = False,
+        keep_cols: Union[bool, List[str], None] = True,
+        exclude_cols: Union[List[str], None] = None,
         verbose: Union[bool, int] = 1,
     ) -> Dataset:
         """
@@ -359,43 +373,54 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         Dataset
             A new dataset containing the mapped rows.
         """
-        fingerprint = hashutils.hash(func)
-        path = self.path / f"map-{fingerprint}"
-        num_batches = ((self.count_rows() - 1) // batch_size) + 1
+        path = gen_unique_cached_path(
+            self.path, func, cache_dir=self.cache_dir
+        )
+        num_steps = (self.count_rows() + batch_size - 1) // batch_size
         batch_iter = self._wrapped.to_batches(batch_size=batch_size)
+        progress_bar = None
         if verbose:
             progress_bar = tqdm.tqdm(
                 batch_iter,
-                total=num_batches,
-                desc=f"Mapping [{fingerprint}]",
+                total=num_steps,
+                desc=f"Mapping [{path.name}]",
+            )
+        batch_iter = batch_iter if progress_bar is None else progress_bar
+        if batched:
+            batch_iter = (
+                create_mapped_table(
+                    func(batch),
+                    batch,
+                    keep_cols=keep_cols,
+                    exclude_cols=exclude_cols,
+                )
+                for batch in batch_iter
             )
         else:
-            progress_bar = None
-        batch_iter = (
-            record_batch(
-                func(batch)
-                if batched
-                else batch.to_pandas().apply(
-                    _map_func_wrapper(func),
-                    axis=1,
+            batch_iter = (
+                create_mapped_table(
+                    batch.to_pandas().apply(
+                        _map_func_wrapper(func),
+                        axis=1,
+                    ),
+                    batch,
+                    keep_cols=keep_cols,
+                    exclude_cols=exclude_cols,
                 )
+                for batch in batch_iter
             )
-            for batch in (batch_iter if progress_bar is None else progress_bar)
-        )
-        state = write_dataset(
-            path,
-            batch_iter,
-            format=self.format,
-        )
+        state = write_dataset(path, batch_iter, format=self.format)
         if not state:
             logger.warning(
                 f"existing dataset found at '{path}', "
                 "loading existing file(s)"
             )
         if progress_bar is not None:
-            progress_bar.update(num_batches)
+            progress_bar.update(num_steps)
             progress_bar.close()
-        return type(self).load_dataset(path, format=self.format)
+        return type(self).load_dataset(
+            path, format=self.format, cache_dir=self.cache_dir
+        )
 
     def filter(self, expression: Expression = None) -> Dataset:
         """
@@ -414,8 +439,9 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         if expression is None:
             return self
         pyarrow_expression = expression.to_pyarrow()
-        fingerprint = hashutils.hash(pyarrow_expression)
-        path = self.path / f"filter-{fingerprint}"
+        path = gen_unique_cached_path(
+            self.path, pyarrow_expression, cache_dir=self.cache_dir
+        )
         dataset = self._wrapped.filter(pyarrow_expression)
         state = write_dataset(
             path,
@@ -428,7 +454,11 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                 f"existing dataset found at '{path}', "
                 "loading existing file(s)"
             )
-        return self.load_dataset(path, format=self.format)
+        return type(self).load_dataset(
+            path,
+            format=self.format,
+            cache_dir=self.cache_dir,
+        )
 
     def select(
         self,
@@ -450,75 +480,88 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         """
         if isinstance(columns, str):
             columns = [columns]
-        fingerprint = hashutils.hash(columns)
-        path = self.path / f"select-{fingerprint}"
+        return self.project(columns, batch_size=batch_size)
+
+    def rename(
+        self,
+        columns: Dict[str, str],
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Dataset:
+        """
+        Rename columns in the dataset.
+
+        Parameters
+        ----------
+        columns : dict
+            Mapping of old column names to new column names.
+
+        Returns
+        -------
+        Dataset
+            A new dataset with the columns renamed.
+        """
+        for col in set(self.columns) - set(columns.keys()):
+            columns[col] = col
+        projs = {
+            new_name: field(old_name) for old_name, new_name in columns.items()
+        }
+        return self.project(projs, batch_size=batch_size)
+
+    def project(
+        self,
+        columns: Union[Dict[str, Expression], Dict[str, str], List[str]],
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Dataset:
+        """
+        Project columns in the dataset.
+
+        Parameters
+        ----------
+        columns : dict
+            Mapping of column names to expressions.
+        batch_size : int
+            Number of rows to project at a time.
+
+        Returns
+        -------
+        Dataset
+            A new dataset with the columns projected.
+        """
+        if isinstance(columns, dict):
+            columns = {
+                name: expr.to_pyarrow()
+                if isinstance(expr, Expression)
+                else field(expr).to_pyarrow()
+                if isinstance(expr, str)
+                else expr
+                for name, expr in columns.items()
+            }
+        path = gen_unique_cached_path(
+            self.path, columns, cache_dir=self.cache_dir
+        )
         scanner = ds.Scanner.from_dataset(
             self._wrapped,
             columns=columns,
             batch_size=batch_size,
         )
-        state = write_dataset(
-            path,
-            scanner,
-            format=self.format,
-        )
+        state = write_dataset(path, scanner, format=self.format)
         if not state:
             logger.warning(
                 f"existing dataset found at '{path}', "
                 "loading existing file(s)"
             )
-        return self.load_dataset(path, format=self.format)
-
-    def cleanup(self):
-        """
-        Delete the directory containing the dataset.
-
-        Returns
-        -------
-        None
-        """
-        if not self.path.exists():
-            return
-        shutil.rmtree(self.path)
-
-    def __enter__(self) -> Dataset:
-        """
-        Context manager entry point.
-
-        Returns
-        -------
-        Dataset
-            The dataset.
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Context manager exit point.
-
-        This will delete the resources allocated for this dataset.
-
-        Parameters
-        ----------
-        exc_type : Exception
-            The exception type.
-        exc_value : Exception
-            The exception value.
-        traceback : Traceback
-            The traceback.
-
-        Returns
-        -------
-        None
-        """
-        with contextlib.suppress(Exception):
-            self.cleanup()
+        return type(self).load_dataset(
+            path,
+            format=self.format,
+            cache_dir=self.cache_dir,
+        )
 
     @classmethod
     def load_dataset(
         cls,
         path: Union[Path, str],
         format: str = DEFAULT_FORMAT,
+        cache_dir: Union[Path, str, None] = None,
     ) -> Dataset:
         """
         Load an existing dataset.
@@ -539,6 +582,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         inst._wrapped = read_dataset(path, format=format)
         inst._path = path
         inst._format = format
+        inst.cache_dir = Path(cache_dir) if cache_dir else None
         return inst
 
     def to_polars(self) -> pl.LazyFrame:
@@ -550,83 +594,17 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         pl.LazyFrame
             The Polars Lazy DataFrame.
         """
-        return pl.scan_ipc(self.path / "data" / "*.arrow")
+        return pl.scan_ipc(self.path / "*.arrow")
 
 
-def write_dataset(
-    path: Union[str, Path],
-    data: Union[
-        ds.Dataset,
-        pa.Table,
-        pa.RecordBatch,
-        # Iterable[pa.Table],
-        Iterable[pa.RecordBatch],  # pa.RecordBatchReader.from_batches
-        pa.RecordBatchReader,
-        pd.DataFrame,  # from_pandas
-        Mapping[str, List[Any]],  # from_pydict
-        Sequence[Mapping[str, Any]],  # from_pylist
-    ],
-    schema: pa.Schema = None,
-    format: Optional[str] = None,
-) -> bool:
-    path = Path(path).expanduser().resolve()
-    if not path.exists():
-        path.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-    # first write to temporary directory
-    temp_path = Path(
-        tempfile.mkdtemp(
-            prefix=".temp-",
-            dir=path,
-        )
-    )
-    out_data_path = get_data_path(path)
-    if out_data_path.exists():
-        return False
-    if isinstance(schema, type) and issubclass(schema, BaseModel):
-        schema = get_schema_from_dataclass(schema)
-    if not isinstance(data, (ds.Dataset, ds.Scanner)):
-        data = record_batch(data, schema=schema)
-    if isinstance(data, pa.RecordBatchReader):
-        schema = None
-    ds.write_dataset(data, temp_path, schema=schema, format=format)
-    try:
-        os.rename(temp_path, out_data_path)
-    except FileExistsError:
-        return False
-    return True
-
-
-def read_dataset(path: Union[str, Path], format: str) -> ds.dataset:
-    path = Path(path).expanduser().resolve()
-    data_path = get_data_path(path)
-    return ds.dataset(
-        data_path,
-        format=format,
-    )
-
-
-def get_data_path(path: Union[str, Path]) -> Path:
-    path = Path(path).expanduser().resolve()
-    if path.is_dir() or not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
-        data_path = path / "data"
-    else:
-        msg = f"expected path to be directory, got '{path}'"
-        raise ValueError(msg)
-    return data_path
-
-
-def generate_unique_path(
-    reference: Any,
-    cache_dir: Union[str, Path, None] = None,
+def gen_unique_cached_path(
+    *refs: Any, cache_dir: Union[str, Path, None] = None
 ) -> Path:
     # create a temporary directory in system temp directory
     if cache_dir is None:
-        cache_dir = cache.path / "datasets"
-    cache_dir = Path(cache_dir).expanduser().resolve()
+        cache_dir = Path(cache.path).expanduser().resolve() / "datasets"
+    else:
+        cache_dir = Path(cache_dir).expanduser().resolve()
     if not cache_dir.exists():
         try:
             cache_dir.mkdir(parents=True, exist_ok=True)
@@ -634,38 +612,34 @@ def generate_unique_path(
             msg = f"failed to create cache directory at '{cache_dir}'"
             raise OSError(msg) from e
     try:
-        fingerprint = hashutils.hash(reference)
+        fingerprint = hashutils.hash(*refs)
         path = cache_dir / f"data-{fingerprint}"
+        path.mkdir(exist_ok=True)
     except Exception as e:
+        path = Path(tempfile.mkdtemp(dir=cache_dir))
         # an error occurred while hashing data
         msg = (
-            "Using temporary directory; "
+            f"Using temporary directory: {path}; "
             f"Failed to create unique path due to the following error: {e}."
         )
         logger.warning(msg)
-        path = Path(tempfile.mkdtemp(dir=cache_dir))
     return path
 
 
-def record_batch(
+def writable(
     data: Any, schema: Optional[pa.Schema] = None
-) -> Union[pa.RecordBatch, pa.RecordBatchReader]:
+) -> Union[pa.RecordBatch, pa.Table, pa.RecordBatchReader]:
     # if generator, return a generator
     if isinstance(data, pa.RecordBatch):
         return data
     if isinstance(data, Generator):
-        # Note: generator of batches not instances
-        data = (record_batch(d, schema=schema) for d in data)
+        data = to_batches(writable(d, schema=schema) for d in data)
         if schema is None:
             data, schema = get_schema(data)
+        # data must be a generator of RecordBatch
         return pa.RecordBatchReader.from_batches(schema, data)
     if isinstance(data, pa.Table):
-        # zero-copy
-        if schema is None:
-            schema = data.schema
-        return pa.RecordBatchReader.from_batches(
-            schema, (d for d in data.to_batches())
-        )
+        return data
     if isinstance(data, pd.DataFrame):
         return pa.RecordBatch.from_pandas(data, schema=schema)
     if isinstance(data, Mapping):
@@ -678,3 +652,92 @@ def record_batch(
         f"'pd.DataFrame', Mapping, or Sequence, got '{dtype}'"
     )
     raise ValueError(msg)
+
+
+def write_dataset(
+    path: Union[str, Path],
+    data: Union[
+        ds.Dataset,
+        pa.Table,
+        pa.RecordBatch,
+        Iterable[pa.RecordBatch],
+        pa.RecordBatchReader,
+        pd.DataFrame,
+        Mapping[str, List[Any]],
+        Sequence[Mapping[str, Any]],
+    ],
+    schema: pa.Schema = None,
+    format: Optional[str] = None,
+) -> bool:
+    path = Path(path).expanduser().resolve() / "data"
+    if path.exists():
+        return False
+    temp_path = Path(tempfile.mkdtemp(prefix=".temp-", dir=path.parent))
+    if isinstance(schema, type) and issubclass(schema, BaseModel):
+        schema = get_schema_from_dataclass(schema)
+    if not isinstance(data, (ds.Dataset, ds.Scanner)):
+        data = writable(data, schema=schema)
+    if isinstance(data, pa.RecordBatchReader):
+        schema = None
+    ds.write_dataset(data, temp_path, schema=schema, format=format)
+    try:
+        os.rename(temp_path, path)
+    except FileExistsError:
+        return False
+    return True
+
+
+def read_dataset(path: Union[str, Path], format: str) -> ds.dataset:
+    path = Path(path).expanduser().resolve() / "data"
+    return ds.dataset(path, format=format)
+
+
+def to_batches(
+    data: Union[
+        pa.Table,
+        pa.RecordBatch,
+        Iterable[pa.RecordBatch],
+        Iterable[pa.Table],
+        pa.RecordBatchReader,
+    ],
+) -> Generator[pa.RecordBatch, None, None]:
+    if isinstance(data, pa.RecordBatch):
+        yield data
+    elif isinstance(data, pa.RecordBatchReader):
+        yield from data
+    elif isinstance(data, pa.Table):
+        yield from data.to_batches()
+    else:
+        for item in data:
+            yield from to_batches(item)
+
+
+def create_mapped_table(
+    data: Union[dict, list, pd.DataFrame, pa.RecordBatch, pa.Table],
+    existing: Optional[pa.Table] = None,
+    keep_cols: Union[bool, List[str], None] = True,
+    exclude_cols: Optional[List[str]] = None,
+) -> pa.Table:
+    # Convert new data to Apache Arrow Table
+    merged_table = pa.table(data)
+    # If there's no existing table, return the new data as is
+    if existing is None:
+        return merged_table
+    # Prepare the set of columns to remove
+    exclude_cols = set(exclude_cols or [])
+    # Determine which columns to keep based on the parameters
+    if keep_cols is True:
+        # Keep all columns except those specified to remove
+        keep_cols = set(existing.column_names) - exclude_cols
+    elif keep_cols:
+        # Keep only the specified columns, excluding those to remove
+        keep_cols = set(keep_cols) - exclude_cols
+    else:
+        # Don't keep any columns
+        keep_cols = set()
+    # Append the columns to keep from the existing table to the new data
+    for i, column in enumerate(existing.columns):
+        field = existing.field(i)
+        if field.name in keep_cols:
+            merged_table = merged_table.append_column(field, column)
+    return merged_table
