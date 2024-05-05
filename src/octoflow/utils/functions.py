@@ -24,6 +24,7 @@ def bind(
     part_kwargs = {}
     extra_args = []
     for param in parameters.values():
+        default = param.default
         if param.kind == param.POSITIONAL_ONLY and len(args) > 0:
             arg = args.pop(0)
             part_args.append(arg)
@@ -41,7 +42,7 @@ def bind(
                     value = kwargs.pop(param.name)
                 part_kwargs[param.name] = value
             else:
-                part_kwargs[param.name] = kwargs[param.name]
+                part_kwargs[param.name] = kwargs.get(param.name, default)
         elif param.kind == param.KEYWORD_ONLY and param.name in kwargs:
             part_kwargs[param.name] = kwargs.pop(param.name)
         elif param.kind == param.VAR_KEYWORD:
