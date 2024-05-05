@@ -5,7 +5,6 @@ import pyarrow as pa
 
 from octoflow.data.dataclass import BaseModel, field
 from octoflow.data.dataset import Dataset
-from octoflow.utils.hashutils import hashable
 
 
 def generate_test_data():
@@ -50,7 +49,6 @@ dataset = Dataset(generate_test_data(), schema=User)
 end_time = time.time()
 
 
-@hashable("src", version="1")
 def make_upper(table: pa.Table):
     text_input = table.column("name").to_pylist()
     return {"upper_name": list(map(str.upper, text_input))}

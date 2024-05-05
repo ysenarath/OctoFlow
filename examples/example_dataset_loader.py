@@ -1,7 +1,6 @@
 import pyarrow as pa
 
 from octoflow.data import load_dataset
-from octoflow.utils.hashutils import hashable
 
 dataset = load_dataset("jsonl", "./examples/*.jsonl")
 
@@ -10,7 +9,6 @@ print(f"  - Number of samples: {len(dataset)}")
 print(f"  - Sample keys: {dataset[0].keys()}")
 
 
-@hashable("src", version="2")
 def make_upper(table: pa.Table):
     text_input = table.column("name").to_pylist()
     return {"upper_name": list(map(str.upper, text_input))}

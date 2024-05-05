@@ -1,33 +1,18 @@
-from octoflow.utils import hashutils
+from __future__ import annotations
+
+from sentence_transformers import SentenceTransformer
+
+from octoflow.utils.hashing import hash, init_based_hash
+
+SentenceTransformerH = init_based_hash(SentenceTransformer)
+
+sentence_model = SentenceTransformerH("all-MiniLM-L6-v2")
+
+print(hash(sentence_model))
 
 
-@hashutils.hashable("dill", version="0.0.1")
 def some_callable():
     return "hello world"
 
 
-print(hashutils.hash(some_callable))
-
-
-@hashutils.hashable("dill", version="0.0.2")
-def some_callable():
-    return "hello world"
-
-
-print(hashutils.hash(some_callable))
-
-
-@hashutils.hashable("src", version="0.0.1")
-def some_callable():
-    return "hello world"
-
-
-print(hashutils.hash(some_callable))
-
-
-@hashutils.hashable("src", version="0.0.1")
-def some_callable():
-    return "hello world"
-
-
-print(hashutils.hash(some_callable))
+print(hash(some_callable))
