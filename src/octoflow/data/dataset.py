@@ -34,8 +34,8 @@ from octoflow.data.dataclass import BaseModel, field
 from octoflow.data.expression import Expression
 from octoflow.data.loaders import DatasetLoader, loaders
 from octoflow.data.schema import get_schema, get_schema_from_dataclass
-from octoflow.utils import hashutils
-from octoflow.utils.cacheutils import cache
+from octoflow.utils import hashing
+from octoflow.utils.cache import cache
 
 logger = logging.get_logger(__name__)
 
@@ -612,7 +612,7 @@ def gen_unique_cached_path(
             msg = f"failed to create cache directory at '{cache_dir}'"
             raise OSError(msg) from e
     try:
-        fingerprint = hashutils.hash(*refs)
+        fingerprint = hashing.hash(*refs)
         path = cache_dir / f"data-{fingerprint}"
         path.mkdir(parents=True, exist_ok=True)
     except Exception as e:
