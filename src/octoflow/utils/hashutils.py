@@ -17,6 +17,7 @@ from typing import (
 
 import dill  # noqa: S403
 import xxhash
+from typing_extensions import ParamSpec
 
 __all__ = [
     "UpdateHashFunc",
@@ -25,6 +26,12 @@ __all__ = [
 ]
 
 T = TypeVar("T")
+P = ParamSpec("P")
+
+ModeType = Union[
+    Literal["dill", "pickle", "pkl", "source", "src"],
+    callable,
+]
 
 
 @runtime_checkable
@@ -122,7 +129,10 @@ def _update_hash_any(
     deep: Optional[bool] = None,
 ) -> None:
     _update_hash_header(m, obj, name=name)
-    m.update(dill.dumps(obj))
+    try:
+        m.update(pickle.dumps(obj))
+    except Exception:
+        m.update(dill.dumps(obj, recurse=True))
 
 
 def _update_hash(
@@ -203,13 +213,15 @@ class UpdateHashFunc:
         *,
         mode: str,
         version: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> None:
         self.obj = obj
         self.mode = mode
         self.version = version
+        self.name = name
 
     def _update_hash_header(self, m: xxhash.xxh64) -> None:
-        _update_hash_header(m, self.obj)
+        _update_hash_header(m, self.obj, name=self.name)
         # add version to hash
         version = "" if self.version is None else self.version
         m.update(f"==Version:{version}==".encode())
@@ -217,7 +229,7 @@ class UpdateHashFunc:
     def __call__(self, m: xxhash.xxh64) -> None:
         self._update_hash_header(m)
         if self.mode == "dill":
-            repr_ = dill.dumps(self.obj)
+            repr_ = dill.dumps(self.obj, recurse=True, byref=True)
         elif self.mode in {"pickle", "pkl"}:
             # works for pickleable objects
             repr_ = pickle.dumps(self.obj)
@@ -233,14 +245,46 @@ class UpdateHashFunc:
 
 
 def hashable(
-    mode: Union[
-        Literal["dill", "pickle", "pkl", "source", "src"],
-        callable,
-    ] = "dill",
-    version: None[str] = None,
-    obj: Optional[T] = None,
+    mode: ModeType = "dill", version: None[str] = None, obj: Optional[T] = None
 ) -> T:
     if obj is None:
         return functools.partial(hashable, mode, version)
     obj._update_hash = UpdateHashFunc(obj, mode=mode, version=version)
+    return obj
+
+
+class InitRecordUpdateHashFunc:
+    def __init__(self, cls: T, *args, **kwargs) -> None:
+        self.cls = cls
+        self.args = args
+        self.kwargs = kwargs
+
+    def __call__(self, m: xxhash.xxh64) -> None:
+        module = self.cls.__module__
+        if module is None or module == str.__class__.__module__:
+            name = self.cls.__name__
+        else:
+            name = module + "." + self.cls.__name__
+        _update_hash_header(m, self, name=name)
+        _update_hash_sequence(m, self.args, name="tklearn.utils.hash.InitArgs")
+        _update_hash_mapping(
+            m, self.kwargs, name="tklearn.utils.hash.InitKeywords"
+        )
+
+
+def decorate_init(cls: T) -> T:
+    base__init__ = cls.__init__
+
+    def decorated__init__(self, *args, **kwargs) -> None:
+        base__init__(self, *args, **kwargs)
+        self._init_record_update_hash = InitRecordUpdateHashFunc(
+            cls, *args, **kwargs
+        )
+
+    cls.__init__ = decorated__init__
+    return cls
+
+
+def use_init_based_hash(obj: T) -> T:
+    obj._update_hash = obj._init_record_update_hash
     return obj
