@@ -9,7 +9,7 @@ hashing of numpy arrays.
 
 import decimal
 import io
-import pickle
+import pickle  # noqa: S403
 import struct
 import sys
 import types
