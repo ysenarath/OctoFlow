@@ -21,6 +21,10 @@ from typing_extensions import ParamSpec, Protocol
 Pickler = pickle._Pickler
 
 
+T = TypeVar("T")
+P = ParamSpec("P")
+
+
 @runtime_checkable
 class Hashable(Protocol):
     """A class that can be hashed."""
@@ -257,15 +261,14 @@ class NumpyHasher(Hasher):
         Hasher.save(self, obj)
 
 
-def hash(obj, coerce_mmap=False):
+def hash(*obj, coerce_mmap=False):
     """Quick calculation of a hash to identify uniquely Python objects
     containing numpy arrays.
 
     Parameters
     ----------
-    hash_name: 'md5' or 'sha1'
-        Hashing algorithm used. sha1 is supposedly safer, but md5 is
-        faster.
+    obj: list of objects
+        The objects to hash
     coerce_mmap: boolean
         Make no difference between np.memmap and np.ndarray
     """
@@ -273,11 +276,8 @@ def hash(obj, coerce_mmap=False):
         hasher = NumpyHasher(coerce_mmap=coerce_mmap)
     else:
         hasher = Hasher()
+    obj = _MyHash("==HashGroup==", *obj)
     return hasher.hash(obj)
-
-
-T = TypeVar("T")
-P = ParamSpec("P")
 
 
 class Wrapped(Generic[T]):
@@ -288,7 +288,7 @@ class Wrapped(Generic[T]):
         obj = self.cls(*args, **kwargs)
 
         def hash_repr():
-            return _MyHash(self.cls, args, kwargs)
+            return _MyHash("==ObjectInitHash==", self.cls, args, kwargs)
 
         obj._hash_repr_ = hash_repr
         return obj
