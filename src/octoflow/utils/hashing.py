@@ -9,6 +9,7 @@ hashing of numpy arrays.
 
 import decimal
 import io
+import logging
 import pickle  # noqa: S403
 import struct
 import sys
@@ -18,8 +19,9 @@ from typing import Any, Callable, Generic, Type, TypeVar, runtime_checkable
 import xxhash
 from typing_extensions import ParamSpec, Protocol
 
-Pickler = pickle._Pickler
+logger = logging.getLogger(__name__)
 
+Pickler = pickle._Pickler
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -276,6 +278,10 @@ def hash(*obj, coerce_mmap=False):
         hasher = NumpyHasher(coerce_mmap=coerce_mmap)
     else:
         hasher = Hasher()
+    objr = ", ".join([
+        o.__class__.__name__ if hasattr(o, "__class__") else "?" for o in obj
+    ])
+    logger.debug("Generating hash of objects of type(s): %s", objr)
     obj = _MyHash("==HashGroup==", *obj)
     return hasher.hash(obj)
 
