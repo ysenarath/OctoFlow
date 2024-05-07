@@ -50,7 +50,14 @@ def get_logger(
     logger = logging.getLogger(name)
     if level is not None:
         logger.setLevel(level)
-    handler = RichHandler(show_time=False, show_level=False, show_path=False)
+    if RichHandler is None:
+        handler = logging.StreamHandler()
+    else:
+        handler = RichHandler(
+            show_time=False,
+            show_level=False,
+            show_path=False,
+        )
     handler.setLevel(logging.DEBUG)
     if not isinstance(formatter, logging.Formatter):
         # Create a formatter

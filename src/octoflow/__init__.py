@@ -26,10 +26,8 @@ logging.logger = logging.get_logger(
     formatter=config.logging.format,
 )
 
-default_plugins_package = None
-
 with contextlib.suppress(ImportError):
     from octoflow_plugins import package as default_plugins_package
 
-if default_plugins_package:
+if "default_plugins_package" in locals():
     default_plugins_package.import_modules()
