@@ -20,16 +20,16 @@ __all__ = [
     "server",
 ]
 
-# create the octoflow root logger
-logger = logging.get_logger(
-    name=next(iter(__package__.split("."))),  # octoflow logger
+logging.logger = logging.get_logger(
+    name="octoflow",
     level=config.logging.level,
-    handlers="console",
     formatter=config.logging.format,
 )
 
-# import default plugins if available
+default_plugins_package = None
+
 with contextlib.suppress(ImportError):
     from octoflow_plugins import package as default_plugins_package
 
+if default_plugins_package:
     default_plugins_package.import_modules()
