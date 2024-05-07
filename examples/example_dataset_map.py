@@ -3,8 +3,13 @@ from typing import List, Union
 
 import pyarrow as pa
 
+from octoflow import logging
 from octoflow.data.dataclass import BaseModel, field
 from octoflow.data.dataset import Dataset
+
+logging.set_level(logging.DEBUG)
+
+logger = logging.get_logger(__name__, logging.DEBUG)
 
 
 def generate_test_data():
@@ -58,4 +63,4 @@ dataset = dataset.map(make_upper, batched=True)
 
 dataset = dataset.rename({"name": "original_name"})
 
-print(dataset[0])
+logger.info(dataset[0])

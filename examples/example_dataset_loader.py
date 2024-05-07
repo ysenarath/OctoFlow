@@ -1,12 +1,17 @@
 import pyarrow as pa
 
+from octoflow import logging
 from octoflow.data import load_dataset
+
+logging.set_level(logging.DEBUG)
+
+logger = logging.get_logger(__name__, logging.DEBUG)
 
 dataset = load_dataset("jsonl", "./examples/*.jsonl")
 
-print("Dataset loaded:")
-print(f"  - Number of samples: {len(dataset)}")
-print(f"  - Sample keys: {dataset[0].keys()}")
+logger.info("Dataset loaded:")
+logger.info(f"  - Number of samples: {len(dataset)}")
+logger.info(f"  - Sample keys: {dataset[0].keys()}")
 
 
 def make_upper(table: pa.Table):
@@ -18,6 +23,6 @@ dataset = dataset.map(make_upper, batched=True)
 
 dataset = dataset.rename({"name": "original_name"})
 
-print(dataset[0])
+logger.info(dataset[0])
 
-print(dataset.path)
+logger.info(dataset.path)
