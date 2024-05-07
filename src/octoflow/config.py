@@ -23,7 +23,7 @@ class ResourcesConfig:
 @dataclass
 class LoggingConfig:
     level: str = "INFO"
-    format: str = "%(asctime)s %(levelname)s %(name)s %(message)s"
+    format: str = "%(asctime)s %(levelname)s %(name)s [%(pathname)s:%(lineno)s] %(message)s"
 
 
 @dataclass
