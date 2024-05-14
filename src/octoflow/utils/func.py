@@ -17,6 +17,26 @@ T = TypeVar("T")
 def bind(
     __func: Callable[P, T], *args: P.args, **kwargs: P.kwargs
 ) -> Union[functools.partial, Callable[..., T]]:
+    """Bind arguments to a function and return a new function.
+
+    This function is similar to `functools.partial` but it allows to bind
+    arguments by name and by position (converting positional arguments to
+    keyword arguments when possible).
+
+    Parameters
+    ----------
+    __func : Callable
+        The function to bind arguments to.
+    *args : P.args
+        Positional arguments to bind to the function.
+    **kwargs : P.kwargs
+        Keyword arguments to bind to the function.
+
+    Returns
+    -------
+    functools.partial or Callable
+        A new function with the arguments bound.
+    """
     args: list = list(args)
     parameters = inspect.signature(__func).parameters
     arg_names = []

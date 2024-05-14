@@ -21,7 +21,7 @@ from typing_extensions import ParamSpec
 
 from octoflow import logging
 from octoflow.data.base import BaseDatasetLoader
-from octoflow.utils import functions
+from octoflow.utils import func
 
 logger = logging.get_logger(__name__)
 
@@ -108,7 +108,7 @@ class DatasetLoader(BaseDatasetLoader):
         Callable[..., R]
             The partial function.
         """
-        return functions.bind(self, *args, **kwargs)
+        return func.bind(self, *args, **kwargs)
 
 
 @overload
