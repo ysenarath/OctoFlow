@@ -29,9 +29,10 @@ class Cache:
     def path(self) -> Path:
         return self._path
 
-    def clear(self):
+    def cleanup(self):
         if self.path.exists():
             shutil.rmtree(self.path)
+        self.path.mkdir(parents=True, exist_ok=True)
 
 
 cache = Cache()
