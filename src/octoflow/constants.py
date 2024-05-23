@@ -1,10 +1,10 @@
-from dataclasses import _MISSING_TYPE, MISSING
+from dataclasses import _MISSING_TYPE, MISSING  # noqa: PLC2701
 
 __all__ = [
-    "MISSING",
-    "MissingType",
-    "DefaultType",
     "DEFAULT",
+    "MISSING",
+    "DefaultType",
+    "MissingType",
 ]
 
 MissingType = _MISSING_TYPE
