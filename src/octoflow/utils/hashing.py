@@ -14,7 +14,16 @@ import pickle  # noqa: S403
 import struct
 import sys
 import types
-from typing import Any, Callable, Generic, Type, TypeVar, runtime_checkable
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Literal,
+    Type,
+    TypeVar,
+    overload,
+    runtime_checkable,
+)
 
 import xxhash
 from typing_extensions import ParamSpec, Protocol
@@ -75,6 +84,11 @@ class Hasher(Pickler):
         Pickler.__init__(self, self.stream, protocol=protocol)
         # Initialise the hash obj
         self._hash = xxhash.xxh64()
+
+    @overload
+    def hash(
+        self, obj: Hashable, return_digest: Literal[True] = ...
+    ) -> str: ...
 
     def hash(self, obj, return_digest=True):
         try:
@@ -305,3 +319,12 @@ class Wrapped(Generic[T]):
 
 def init_based_hash(cls: Type[T]) -> Wrapped[T]:
     return Wrapped(cls)
+
+
+def hashable(func: Callable[P, T]) -> Callable[P, T]:
+    def hash_repr() -> Any:
+        return _MyHash("==FunctionHash==", func)
+
+    func._hash_repr_ = hash_repr
+
+    return func
