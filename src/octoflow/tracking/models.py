@@ -1,369 +1,374 @@
 from __future__ import annotations
 
-import copy
-import datetime as dt
-import os
-from collections import UserDict, defaultdict
-from dataclasses import field
-from typing import (
-    Any,
-    Dict,
-    Iterator,
-    List,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Tuple,
-    Union,
-)
+import enum
+import json
+import shutil
+import sqlite3 as sqlite
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from typing_extensions import Self
+import pandas as pd
+from packaging.version import Version
 
-from octoflow.tracking import store
-from octoflow.tracking.store import (
-    StoredModel,
-    TrackingStore,
-    ValueType,
-    VariableType,
+from octoflow.core import Task
+from octoflow.tracking.artifact.handler import (
+    get_handler_type,
+    get_handler_type_by_object,
+    get_handler_type_by_path,
 )
+from octoflow.utils import hashing
 from octoflow.utils.collections import flatten
 
-__all__ = [
-    "Experiment",
-    "Run",
-    "TrackingStore",
-    "Value",
-    "Variable",
-]
 
-JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
+class RunState(enum.Enum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RUNNING = "running"
 
 
-class TrackingClient:
-    def __init__(self, store: TrackingStore) -> None:
-        super().__init__()
-        self._store: Optional[TrackingStore] = store
-
-    @property
-    def store(self) -> TrackingStore:
-        if self._store is None:
-            msg = "store not set"
-            raise RuntimeError(msg)
-        return self._store
-
-    def create_experiment(
+class Experiment:
+    def __init__(
         self,
-        name: str,
-        description: Optional[str] = None,
-        artifact_uri: Optional[str] = None,
-    ) -> Experiment:
-        return self._store.create_experiment(name, description, artifact_uri)
-
-    def get_experiment_by_name(self, name: str) -> Optional[Experiment]:
-        return self._store.get_experiment_by_name(name)
-
-    def get_or_create_experiment(
-        self,
-        name: str,
-        *,
-        description: Optional[str] = None,
-        artifact_uri: Optional[str] = None,
-    ) -> Experiment:
-        err = None
-        try:
-            # try to create if exists - if fails then it is there
-            return self.create_experiment(
-                name,
-                description,
-                artifact_uri,
-            )
-        except ValueError as e:
-            err = e
-        try:
-            return self.get_experiment_by_name(name)
-        except ValueError as ex:
-            if err is not None:
-                raise err from ex
-            raise ex
-
-    def list_experiments(self):
-        return self._store.list_experiments()
-
-
-class Experiment(StoredModel):
-    id: int = field(init=False)
-    name: str
-    description: Optional[str]
-    artifact_uri: Optional[str]
-
-    @store.wrap
-    def start_run(self, name: str, description: Optional[str] = None) -> Run:
-        return self.store.create_run(self.id, name, description)
-
-    @store.wrap
-    def search_runs(self, **kwargs) -> List[Run]:
-        return self.store.search_runs(self.id, **kwargs)
-
-    @store.wrap
-    def delete_run(self, run: Union[Run, int]) -> None:
-        run_id = run.id if isinstance(run, Run) else run
-        self.store.delete_run(self.id, run_id)
-
-
-class TagsMapping(MutableMapping[str, JSONType]):
-    def __init__(self, run: Run) -> None:
-        self._run = run
-
-    def __getitem__(self, key: str) -> JSONType:
-        with self._run._store:
-            return self._run.store.get_tag(self._run.id, key)
-
-    def __setitem__(self, key: str, value: JSONType) -> None:
-        with self._run._store:
-            self._run.store.set_tag(self._run.id, key, value)
-
-    def __delitem__(self, key: str) -> None:
-        with self._run._store:
-            self._run.store.delete_tag(self._run.id, key)
-
-    @property
-    def data(self) -> Dict[str, JSONType]:
-        with self._run._store:
-            return self._run.store.get_tags(self._run.id)
-
-    def __iter__(self) -> Iterator[str]:
-        for key, _ in self.data.items():
-            yield key
-
-    def __len__(self) -> int:
-        with self._run._store:
-            return self._run.store.count_tags(self._run.id)
-
-    def __repr__(self) -> str:
-        return repr(self.data)
-
-
-class Run(StoredModel):
-    id: int = field(init=False)
-    experiment_id: int
-    name: str
-    description: Optional[str]
-    created_at: Optional[dt.datetime] = None
-
-    tags: MutableMapping[str, JSONType] = field(init=False)
-
-    def __post_init__(self):
-        super().__post_init__()
-        self.tags = TagsMapping(self)
-
-    @store.wrap
-    def log_param(
-        self,
-        key: str,
-        value: ValueType,
-        *,
-        step: Union[Value, int, None] = None,
-    ) -> Value:
-        step_id = step.id if isinstance(step, Value) else step
-        return self.store.log_value(
-            self.id,
-            key,
-            value,
-            step_id=step_id,
-            type="param",
-            is_step=None,
-        )
-
-    @store.wrap
-    def log_params(
-        self,
-        values: Mapping[str, ValueType],
-        *,
-        step: Optional[Value] = None,
-        prefix: Optional[str] = None,
-    ) -> List[Value]:
-        step_id = step.id if isinstance(step, Value) else step
-        input_vals = []
-        for key, value in flatten(values, parent_key=prefix).items():
-            input_vals.append({
-                "key": key,
-                "value": value,
-                "type": "param",
-                "step_id": step_id,
-                "is_step": None,
-            })
-        return self.store.log_values(self.id, input_vals)
-
-    @store.wrap
-    def log_metric(
-        self,
-        key: str,
-        value: ValueType,
-        *,
-        step: Union[Value, int, None] = None,
-    ) -> Value:
-        step_id = step.id if isinstance(step, Value) else step
-        return self.store.log_value(
-            self.id,
-            key,
-            value,
-            step_id=step_id,
-            type="metric",
-            is_step=False,
-        )
-
-    @store.wrap
-    def log_metrics(
-        self,
-        values: Mapping[str, ValueType],
-        *,
-        step: Optional[Value] = None,
-        prefix: Optional[str] = None,
-    ) -> List[Value]:
-        step_id = step.id if isinstance(step, Value) else step
-        input_vals = []
-        for key, value in flatten(values, parent_key=prefix).items():
-            input_vals.append({
-                "key": key,
-                "value": value,
-                "type": "metric",
-                "step_id": step_id,
-                "is_step": False,
-            })
-        return self.store.log_values(self.id, input_vals)
-
-    @store.wrap
-    def get_values(self) -> List[Tuple[Variable, Value]]:
-        return self.store.get_values(self.id)
-
-
-class Variable(StoredModel):
-    id: int = field(init=False)
-    experiment_id: int
-    key: str
-    parent_id: Optional[int]
-    type: Optional[VariableType] = None
-    is_step: Optional[bool] = None
-
-
-class Value(StoredModel):
-    id: int = field(init=False)
-    run_id: int
-    variable_id: int
-    value: ValueType
-    timestamp: Optional[dt.datetime] = None
-    step_id: Optional[int] = None
-
-
-class RunTags(StoredModel):
-    id: int = field(init=False)
-    run_id: int
-    tag_id: int
-    value: JSONType = None
-
-
-class Tag(StoredModel):
-    id: int = field(init=False)
-    name: str
-
-
-class TreeNode(UserDict):
-    is_nested: bool = False
-
-    @classmethod
-    def _from_values(
-        cls,
-        root: Dict[int, Any],
-        nodes: Dict[int, Tuple[str, Any]],
+        path: Union[Path, str],
         /,
-        path="/",
-    ) -> Self:
-        tree = cls()
-        for node_id, inner in root.items():
-            key, value = nodes[node_id]
-            key_path = os.path.join(path, str(key))
-            value_path = os.path.join(key_path, str(value))
-            if inner is None:
-                if key in tree:
-                    msg = f"key path '{key_path}' already exists"
-                    raise ValueError(msg)
-                tree[key] = value
-            elif key in tree:
-                temp = tree[key]
-                if not isinstance(temp, TreeNode) or not temp.is_nested:
-                    msg = (
-                        f"expected nested 'TreeNode' for key path '{key_path}'"
-                    )
-                    msg += f", got '{type(temp).__name__}'"
-                    raise ValueError(msg)
-                temp.update({
-                    value: cls._from_values(inner, nodes, path=value_path),
-                })
-            else:
-                subtree = TreeNode()
-                subtree.is_nested = True
-                subtree.update({
-                    value: cls._from_values(inner, nodes, path=value_path),
-                })
-                tree[key] = subtree
-        return tree
+        name: str,
+        description: Optional[str] = None,
+    ):
+        self.path = Path(path)
+        if not name.isidentifier():
+            msg = f"invalid name: {name}"
+            raise ValueError(msg)
+        self.name = name
+        self.description = description
+        self.save(exist_ok=True)
+
+    def save(self, exist_ok: bool = False) -> None:
+        path = Path(self.path) / self.name / "metadata.json"
+        if not exist_ok and path.exists():
+            msg = f"already exists: {path}"
+            raise FileExistsError(msg)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        metadata = {"name": self.name, "description": self.description}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f)
 
     @classmethod
-    def from_values(cls, values: List[Tuple[Variable, Value]]) -> Self:
-        nodes = {}
-        is_step = {}
-        for var, value in values:
-            is_step[value.id] = var.is_step
-            nodes[value.id] = (var.key, value.value)
-        tree = {}
-        for _, value in values:
-            sn, vn = value.step_id, value.id
-            if sn is None:
-                sn = "__root__"
-            if vn not in tree:
-                tree[vn] = {} if is_step[value.id] else None
-            if sn not in tree:
-                tree[sn] = {}
-            tree[sn][vn] = tree[vn]
-        root = tree["__root__"]
-        return cls._from_values(root, nodes)
+    def load(cls, path: Union[Path, str], name: str) -> Optional[Experiment]:
+        path = Path(path)
+        metadata_path = path / name / "metadata.json"
+        if not metadata_path.exists():
+            return None
+        with open(metadata_path, encoding="utf-8") as f:
+            metadata = json.load(f)
+        return cls(path, **metadata)
 
-    def _flatten(
+    def start_run(self, name: Union[str, Task]) -> Run:
+        return Run(Path(self.path) / self.name / "runs" / name)
+
+    def run_task(self, task: Task) -> None:
+        fingerprint = hashing.hash(task.get_params())
+        run = self.start_run(fingerprint)
+        return task.run(run)
+
+    def cleanup(
+        self, name_or_task: Union[str, Task], force: bool = False
+    ) -> List[Path]:
+        if isinstance(name_or_task, Task):
+            run_name = hashing.hash(name_or_task.get_params())
+        else:
+            run_name = str(name_or_task)
+        deleted_paths = []
+        if not (self.path / self.name / "runs").exists():
+            return deleted_paths
+        for dir in (self.path / self.name / "runs").iterdir():
+            # if state is COMPLETED, then skip
+            run = Run.from_existing(dir)
+            if not force and run.state == RunState.COMPLETED:
+                continue
+            if not dir.name.startswith(f"{run_name}-"):
+                continue
+            shutil.rmtree(dir)
+            deleted_paths.append(dir)
+        return deleted_paths
+
+    def get_run(
         self,
-        *,
-        base_dict: Optional[dict] = None,
-        ancestor_keys: Optional[Tuple[str]] = None,
-    ) -> Dict[Tuple, List]:
-        if base_dict is None:
-            base_dict = {}
-        if ancestor_keys is None:
-            ancestor_keys = ()
-        for key, value in self.items():
-            if isinstance(value, TreeNode) and value.is_nested:
-                continue  # skip nested values
-            pkey = (*ancestor_keys, key)
-            base_dict[pkey] = value
-        branches = defaultdict(list)
-        base_index = tuple(sorted(base_dict.keys()))
-        branches[base_index].append(base_dict)
-        for key, values in self.items():
-            if not isinstance(values, TreeNode) or not values.is_nested:
-                continue  # skip non-nested values
-            pkey = (*ancestor_keys, key)
-            for value, nested in values.items():
-                base_dict_copy = copy.deepcopy(base_dict)
-                base_dict_copy[pkey] = value
-                if not isinstance(nested, TreeNode):
-                    msg = f"expected 'TreeNode', got '{type(nested).__name__}'"
-                    raise ValueError(msg)
-                for branch_index, nested_branches in nested._flatten(
-                    base_dict=base_dict_copy,
-                    ancestor_keys=pkey,
-                ).items():
-                    branches[branch_index] += nested_branches
-        if len(branches) > 1:
-            branches.pop(base_index)
-        return branches
+        name_or_task: Union[str, Task],
+        version: Union[str, Version] = "latest",
+        state: Union[RunState, List[RunState], None] = RunState.COMPLETED,
+    ) -> Optional[Run]:
+        if state is not None:
+            if not isinstance(state, list):
+                state = [state]
+            state = [
+                RunState(s.lower()) if isinstance(s, str) else s for s in state
+            ]
+        if isinstance(name_or_task, Task):
+            run_name = hashing.hash(name_or_task.get_params())
+        else:
+            run_name = str(name_or_task)
+        if version == "latest":
+            latest_version = None
+            for dir in (self.path / self.name / "runs").glob(f"{run_name}-v*"):
+                _, vstring = dir.name.rsplit("-v", 1)
+                # get the state of the run
+                run = Run.from_existing(dir)
+                if state is not None and run.state not in state:
+                    continue
+                if latest_version is None:
+                    latest_version = Version(vstring)
+                    continue
+                latest_version = max(latest_version, Version(vstring))
+            if latest_version is None:
+                return None
+            version = latest_version
+        elif not isinstance(version, Version):
+            version = Version(version)
+        run_path = self.path / self.name / "runs" / f"{run_name}-v{version}"
+        if run_path.exists():
+            return Run.from_existing(run_path)
+        return None
 
-    def flatten(self) -> Dict[Tuple, List]:
-        return self._flatten()
+
+TABLE_CREATE_SQL = """CREATE TABLE IF NOT EXISTS runs (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+key TEXT,
+value JSON,
+type TEXT,
+step INTEGER,
+FOREIGN KEY (step) REFERENCES runs (id) ON DELETE CASCADE,
+CHECK (type IN ('param', 'metric')),
+CHECK (key NOT GLOB '*[^a-zA-Z_0-9]*'),
+CHECK (key GLOB '[^0-9]*')
+)"""
+
+UNIQUE_METRIC_INDEX_SQL = """CREATE UNIQUE INDEX IF NOT EXISTS
+ix_runs_key_step_metric ON runs (key, step)
+WHERE type = 'metric'"""
+
+UNIQUE_METRIC_NULL_STEP_INDEX_SQL = """CREATE UNIQUE INDEX IF NOT EXISTS
+ix_runs_key_null_step_metric ON runs (key)
+WHERE type = 'metric' AND step IS NULL"""
+
+UNIQUE_PARAM_INDEX_SQL = """CREATE UNIQUE INDEX IF NOT EXISTS
+ix_runs_key_step_param ON runs (key, value, step)
+WHERE type = 'param'"""
+
+UNIQUE_PARAM_NULL_STEP_INDEX_SQL = """CREATE UNIQUE INDEX IF NOT EXISTS
+ix_runs_key_null_step_param ON runs (key, value)
+WHERE type = 'param' AND step IS NULL"""
+
+
+class Run:
+    @classmethod
+    def from_existing(cls, path: Union[Path, str]) -> Run:
+        self = cls.__new__(cls)
+        self.path = Path(path)
+        return self
+
+    def __init__(self, path: Union[Path, str]):
+        self.path = self._prepare(path)
+        self.state = RunState.RUNNING
+
+    @property
+    def state(self) -> RunState:
+        if not (self.path / "state").exists():
+            return RunState.FAILED
+        with open(self.path / "state", encoding="utf-8") as f:
+            return RunState[f.read()]
+
+    @state.setter
+    def state(self, value: str) -> None:
+        # convert to enum to validate
+        state = RunState(value)
+        with open(self.path / "state", "w", encoding="utf-8") as f:
+            f.write(state.name)
+
+    @staticmethod
+    def _prepare(path: Path) -> Path:
+        path = Path(path)
+        name = path.name
+        version = 0
+        while True:
+            version += 1
+            run_path = path.with_name(f"{name}-v{version}")
+            try:
+                # try to create the directory
+                run_path.mkdir(parents=True, exist_ok=False)
+                break
+            except FileExistsError:
+                # check with the next version
+                continue
+        conn = sqlite.connect(run_path / "values.db")
+        try:
+            cursor = conn.cursor()
+            cursor.execute(TABLE_CREATE_SQL)
+            cursor.execute(UNIQUE_METRIC_INDEX_SQL)
+            cursor.execute(UNIQUE_METRIC_NULL_STEP_INDEX_SQL)
+            cursor.execute(UNIQUE_PARAM_INDEX_SQL)
+            cursor.execute(UNIQUE_PARAM_NULL_STEP_INDEX_SQL)
+            conn.commit()
+        except sqlite.Error as e:
+            conn.rollback()
+            msg = f"failed to create database at '{run_path}'"
+            raise ValueError(msg) from e
+        finally:
+            conn.close()
+        return run_path
+
+    def log_value(
+        self, key: str, value: Any, type: str, step: Optional[int] = None
+    ) -> int:
+        if value is not None and not isinstance(
+            value, (float, int, str, bool)
+        ):
+            msg = f"invalid value: {value}"
+            raise TypeError(msg)
+        conn = sqlite.connect(self.path / "values.db")
+        # make sure step is a param type
+        if step is not None:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM runs WHERE id = ?",
+                (step,),
+            )
+            result = cursor.fetchone()
+            if result is None:
+                msg = f"step '{step}' not found"
+                raise ValueError(msg)
+            _, _, _, step_type, _ = result
+            if step_type != "param":
+                msg = f"step '{step}' is not a param type"
+                raise ValueError(msg)
+        try:
+            cursor = conn.cursor()
+            result = cursor.execute(
+                "INSERT INTO runs VALUES (NULL, ?, ?, ?, ?)",
+                (key, value, type, step),
+            )
+            conn.commit()
+        except sqlite.Error as e:
+            conn.rollback()
+            msg = f"failed to log {type} '{key}' with value '{value}'"
+            raise ValueError(msg) from e
+        finally:
+            conn.close()
+        return result.lastrowid
+
+    def log_param(
+        self, key: str, value: Any, *, step: Optional[int] = None
+    ) -> int:
+        return self.log_value(key, value, "param", step=step)
+
+    def log_params(
+        self, params: Dict[str, Any], *, step: Optional[int] = None
+    ) -> Dict[str, int]:
+        out = {}
+        for key, value in flatten(params).items():
+            out[key] = self.log_param(key, value, step=step)
+        return out
+
+    def log_metric(
+        self, key: str, value: Any, *, step: Optional[int] = None
+    ) -> int:
+        return self.log_value(key, value, "metric", step=step)
+
+    def log_metrics(
+        self, metrics: Dict[str, Any], *, step: Optional[int] = None
+    ) -> Dict[str, int]:
+        out = {}
+        for key, value in flatten(metrics).items():
+            out[key] = self.log_metric(key, value, step=step)
+        return out
+
+    def log_artifact(
+        self, __key: str, __obj: Any, *args: Any, **kwargs: Any
+    ) -> None:
+        handler = get_handler_type_by_object(__obj)
+        handler = handler(self.path / "artifacts" / __key)
+        return handler.save(__obj, *args, **kwargs)
+
+    def get_artifact(self, __key: str, __type: Optional[str] = None) -> Any:
+        if __type is None:
+            handler = get_handler_type_by_path(self.path / "artifacts" / __key)
+        else:
+            handler = get_handler_type(__type)
+        handler = handler(self.path / "artifacts" / __key)
+        return handler.load()
+
+    def get_values(
+        self,
+        var: Union[str, Tuple[str], None] = None,
+    ) -> dict:
+        conn = sqlite.connect(self.path / "values.db")
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM runs")
+            results = cursor.fetchall()
+        except sqlite.Error as e:
+            msg = f"failed to get values from '{self.path}'"
+            raise ValueError(msg) from e
+        finally:
+            conn.close()
+        edges: Dict[int, List[int]] = {}
+        for id, _, _, _, step in results:
+            if step is None:
+                step = -1
+            if step not in edges:
+                edges[step] = []
+            edges[step].append(id)
+        nodes = {id: (key, value, type) for id, key, value, type, _ in results}
+        tree = build_nested_tree(nodes, edges)
+        values = filter_by_var(tree, var)
+        return pd.DataFrame(values)
+
+
+def build_nested_tree(
+    nodes: Dict[int, Tuple[str, Any, str]],
+    edges: Dict[int, List[int]],
+    root: int = -1,
+) -> dict:
+    tree = {}
+    for id in edges.get(root, []):
+        key, value, type = nodes[id]
+        if id in edges:
+            if type != "param":
+                msg = f"invalid type '{type}' for node with children"
+                raise ValueError(msg)
+            if key not in tree:
+                tree[key] = {}
+            tree[key][value] = build_nested_tree(nodes, edges, id)
+        else:
+            tree[key] = value
+    return tree
+
+
+def filter_by_var(
+    tree: dict,
+    var: Union[str, Tuple[str], None],
+    **kwargs,
+) -> Any:
+    if var is None:
+        return [tree]
+    if kwargs.get("_vars_preprocess", True):
+        if not isinstance(var, str):
+            var = ".".join(var)
+        var = var.split(".")
+    key = var.pop(0)
+    if key not in tree:
+        msg = f"variable '{(key, *var)}' not found in tree"
+        raise KeyError(msg)
+    tree = tree[key]
+    if len(var) == 0:
+        return [{key: tree}]
+    if not isinstance(tree, dict):
+        msg = f"variable '{(key, *var)}' not found in tree"
+        raise KeyError(msg)
+    output = []
+    for value, subtree in tree.items():
+        for item in filter_by_var(
+            subtree, var.copy(), **{"_vars_preprocess": False}
+        ):
+            item.update({key: value})
+            output.append(item)
+    return output
