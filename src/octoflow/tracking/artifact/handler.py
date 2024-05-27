@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import abc
-import json
 import shutil
-import weakref
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Type, Union
+from typing import Any, Dict, List, Type, Union
 
-from octoflow.utils.collections import MutableDict
+from octoflow.data.metadata import Metadata
 
 _handler_types: Dict[str, Type[ArtifactHandler]] = {}
+
+METADATA_FILENAME = "metadata.json"
+TYPE_FIELD = "type"
 
 
 def get_handler_type(name: str) -> Type[ArtifactHandler]:
@@ -32,35 +33,24 @@ def get_handler_type_by_object(obj: Any) -> Type[ArtifactHandler]:
     if handler is not None:
         return handler
     # if we get here, we didn't find an appropriate handler for the object
-    msg = f"'{type(obj).__name__}' has no handler"
+    msg = f"'{obj.__class__.__name__}' has no handler"
     raise ValueError(msg)
+
+
+def get_handler_type_by_path(path: Union[str, Path]) -> Type[ArtifactHandler]:
+    metadata = Metadata(Path(path) / METADATA_FILENAME)
+    if not path.exists():
+        msg = f"artifact without metadata at '{path}'"
+        raise FileNotFoundError(msg)
+    if TYPE_FIELD not in metadata:
+        msg = f"artifact metadata missing 'type' at '{path}'"
+        raise KeyError(msg)
+    handler_type_str = metadata[TYPE_FIELD]
+    return get_handler_type(handler_type_str)
 
 
 def list_handler_types() -> List[str]:
     return list(_handler_types.keys())
-
-
-class ArtifactMetadata(MutableDict[str, Any]):
-    def __init__(self, handler: ArtifactHandler) -> None:
-        self.handler_ref = weakref.ref(handler)
-        super().__init__(self._load_data())
-        self.add_event_listener("change", self._on_change)
-
-    @property
-    def handler(self) -> ArtifactHandler:
-        return self.handler_ref()
-
-    def _on_change(self) -> Generator[Dict[str, Any], None, None]:
-        path = self.handler.path / ".metadata.json"
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f)
-
-    def _load_data(self) -> Dict[str, Any]:
-        path = self.handler.path / ".metadata.json"
-        if not path.exists():
-            return {}
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
 
 
 class ArtifactHandlerType(abc.ABCMeta):
@@ -88,10 +78,23 @@ class ArtifactHandler(metaclass=ArtifactHandlerType):
             The path to the artifact
         """
         super().__init__()
-        self.path: Path = Path(path)
-        if not self.path.exists():
-            self.path.mkdir(parents=True)
-        self.metadata = ArtifactMetadata(self)
+        path = Path(path)
+        (path / "data").mkdir(parents=True, exist_ok=True)
+        self.metadata = Metadata(path / METADATA_FILENAME)
+        if TYPE_FIELD in self.metadata:
+            if self.metadata[TYPE_FIELD] == self.__class__.name:
+                return
+            msg = (
+                f"metadata type '{self.metadata[TYPE_FIELD]}' does "
+                f"not match handler type '{self.__class__.name}'"
+            )
+            raise ValueError(msg)
+        else:
+            self.metadata[TYPE_FIELD] = self.__class__.name
+
+    @property
+    def path(self) -> Path:
+        return self.metadata._path.parent / "data"
 
     @abc.abstractmethod
     def load(self) -> Any:
