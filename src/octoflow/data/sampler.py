@@ -9,8 +9,15 @@ __all__ = [
 
 
 class Sampler:
-    def __init__(self, columns: Mapping[str, int]):
-        self.args = (0, *list(columns.values()))
+    def __init__(self, columns: Mapping[str, int], boundaries: bool = False):
+        if boundaries:
+            self.args = (0, *list(columns.values()), None)
+        else:
+            i = 0
+            self.args = [i]
+            for v in columns.values():
+                i += v
+                self.args.append(i)
         self.columns = list(columns.keys())
 
     def __call__(self, lst: Sequence[int]):
