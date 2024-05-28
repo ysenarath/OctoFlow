@@ -16,7 +16,7 @@ from octoflow.tracking.artifact.handler import (
     get_handler_type_by_object,
     get_handler_type_by_path,
 )
-from octoflow.utils import hashing
+from octoflow.utils import hashing, string
 from octoflow.utils.collections import flatten
 
 
@@ -137,10 +137,13 @@ value JSON,
 type TEXT,
 step INTEGER,
 FOREIGN KEY (step) REFERENCES runs (id) ON DELETE CASCADE,
-CHECK (type IN ('param', 'metric')),
+CHECK (type IN ('param', 'metric'))
+)"""
+
+""",
 CHECK (key NOT GLOB '*[^a-zA-Z_0-9]*'),
 CHECK (key GLOB '[^0-9]*')
-)"""
+"""
 
 UNIQUE_METRIC_INDEX_SQL = """CREATE UNIQUE INDEX IF NOT EXISTS
 ix_runs_key_step_metric ON runs (key, step)
@@ -343,17 +346,9 @@ def build_nested_tree(
     return tree
 
 
-def filter_by_var(
-    tree: dict,
-    var: Union[str, Tuple[str], None],
-    **kwargs,
-) -> Any:
-    if var is None:
-        return [tree]
-    if kwargs.get("_vars_preprocess", True):
-        if not isinstance(var, str):
-            var = ".".join(var)
-        var = var.split(".")
+def _filter_by_var(tree: dict, var: List[str]) -> Any:
+    if len(var) == 0:
+        return []
     key = var.pop(0)
     if key not in tree:
         msg = f"variable '{(key, *var)}' not found in tree"
@@ -366,9 +361,16 @@ def filter_by_var(
         raise KeyError(msg)
     output = []
     for value, subtree in tree.items():
-        for item in filter_by_var(
-            subtree, var.copy(), **{"_vars_preprocess": False}
-        ):
+        for item in _filter_by_var(subtree, var.copy()):
             item.update({key: value})
             output.append(item)
     return output
+
+
+def filter_by_var(tree: dict, var: Union[str, Tuple[str], None]) -> dict:
+    if var is None:
+        return [tree]
+    if not isinstance(var, str):
+        var = string.join(var, ".")
+    var = string.split(var, ".")
+    return _filter_by_var(tree, var)
