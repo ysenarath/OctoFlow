@@ -366,7 +366,11 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         batched : bool
             Whether the function is batched.
         verbose : bool | int
-            Whether to show a progress bar.
+            Whether to show a progress bar or not. When set to 0, no progress
+            bar is shown. When set to 1, a progress bar is shown but all traces
+            of the progress bar are removed upon termination of iteration. When
+            set to 2, the progress bar is shown and keeps all traces of the
+            progress bar upon termination of iteration
 
         Returns
         -------
@@ -378,14 +382,14 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         )
         num_steps = (self.count_rows() + batch_size - 1) // batch_size
         batch_iter = self._wrapped.to_batches(batch_size=batch_size)
-        progress_bar = None
-        if verbose:
-            progress_bar = tqdm.tqdm(
-                batch_iter,
-                total=num_steps,
-                desc=f"Mapping [{path.name}]",
-            )
-        batch_iter = batch_iter if progress_bar is None else progress_bar
+        progress_bar = tqdm.tqdm(
+            batch_iter,
+            total=num_steps,
+            desc=f"Mapping [{path.name}]",
+            disable=int(verbose) < 1,
+            leave=int(verbose) > 1,
+        )
+        batch_iter = progress_bar
         if batched:
             batch_iter = (
                 create_mapped_table(
@@ -415,9 +419,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                 f"existing dataset found at '{path}', "
                 "loading existing file(s)"
             )
-        if progress_bar is not None:
-            progress_bar.update(num_steps)
-            progress_bar.close()
+        progress_bar.close()
         return type(self).load_dataset(
             path, format=self.format, cache_dir=self.cache_dir
         )
