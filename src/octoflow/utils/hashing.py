@@ -8,6 +8,8 @@ hashing of numpy arrays.
 # License: BSD Style, 3 clauses.
 
 import decimal
+import functools
+import inspect
 import io
 import logging
 import pickle  # noqa: S403
@@ -19,6 +21,7 @@ from typing import (
     Callable,
     Generic,
     Literal,
+    Optional,
     Type,
     TypeVar,
     overload,
@@ -113,13 +116,17 @@ class Hasher(Pickler):
                 func_name = obj.__name__
             inst = obj.__self__
             if type(inst) is type(pickle):
-                obj = _MyHash(func_name, inst.__name__)
+                obj = _MyHash("==MethodType==", func_name, inst.__name__)
             elif inst is None:
                 # type(None) or type(module) do not pickle
-                obj = _MyHash(func_name, inst)
+                obj = _MyHash("==MethodType==", func_name, inst)
             else:
                 cls = obj.__self__.__class__
-                obj = _MyHash(func_name, inst, cls)
+                obj = _MyHash("==MethodType==", func_name, inst, cls)
+        if isinstance(obj, types.FunctionType):
+            pkl = pickle.dumps(obj)
+            src = inspect.getsource(obj)
+            obj = _MyHash("==FunctionType==", pkl, src)
         Pickler.save(self, obj)
 
     def memoize(self, obj):
@@ -321,10 +328,19 @@ def init_based_hash(cls: Type[T]) -> Wrapped[T]:
     return Wrapped(cls)
 
 
-def hashable(func: Callable[P, T]) -> Callable[P, T]:
+def hashable(
+    func: Optional[Callable[P, T]] = None,
+    /,
+    *,
+    depends: Optional[Any] = None,
+) -> Callable[P, T]:
+    if func is None:
+        return functools.partial(hashable, depends=depends)
+
     def hash_repr() -> Any:
-        return _MyHash("==FunctionHash==", func)
+        pkl = pickle.dumps(func)
+        src = inspect.getsource(func)
+        return _MyHash("==WrappedFunction==", pkl, src, depends)
 
     func._hash_repr_ = hash_repr
-
     return func
