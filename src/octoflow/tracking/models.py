@@ -222,11 +222,6 @@ class Run:
     def log_value(
         self, key: str, value: Any, type: str, step: Optional[int] = None
     ) -> int:
-        if value is not None and not isinstance(
-            value, (float, int, str, bool)
-        ):
-            msg = f"invalid value: {value}"
-            raise TypeError(msg)
         conn = sqlite.connect(self.path / "values.db")
         # make sure step is a param type
         if step is not None:
