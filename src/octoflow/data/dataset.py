@@ -380,16 +380,14 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         path = gen_unique_cached_path(
             self.path, func, cache_dir=self.cache_dir
         )
-        num_steps = (self.count_rows() + batch_size - 1) // batch_size
+        # num_steps = (self.count_rows() + batch_size - 1) // batch_size
         batch_iter = self._wrapped.to_batches(batch_size=batch_size)
         progress_bar = tqdm.tqdm(
-            batch_iter,
-            total=num_steps,
+            total=self.count_rows(),
             desc=f"Mapping [{path.name}]",
             disable=int(verbose) < 1,
             leave=int(verbose) > 1,
         )
-        batch_iter = progress_bar
         if batched:
             batch_iter = (
                 create_mapped_table(
@@ -397,6 +395,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                     batch,
                     keep_cols=keep_cols,
                     exclude_cols=exclude_cols,
+                    progress_bar=progress_bar,
                 )
                 for batch in batch_iter
             )
@@ -410,6 +409,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
                     batch,
                     keep_cols=keep_cols,
                     exclude_cols=exclude_cols,
+                    progress_bar=progress_bar,
                 )
                 for batch in batch_iter
             )
@@ -720,9 +720,12 @@ def create_mapped_table(
     existing: Optional[pa.Table] = None,
     keep_cols: Union[bool, List[str], None] = True,
     exclude_cols: Optional[List[str]] = None,
+    progress_bar: Optional[tqdm.tqdm] = None,
 ) -> pa.Table:
     # Convert new data to Apache Arrow Table
     merged_table = pa.table(data)
+    if progress_bar:
+        progress_bar.update(merged_table.num_rows)
     # If there's no existing table, return the new data as is
     if existing is None:
         return merged_table
