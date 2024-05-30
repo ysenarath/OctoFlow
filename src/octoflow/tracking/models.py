@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import enum
 import json
+import re
 import shutil
 import sqlite3 as sqlite
 from pathlib import Path
@@ -35,10 +36,10 @@ class Experiment:
         description: Optional[str] = None,
     ):
         self.path = Path(path)
-        if not name.isidentifier():
+        if not re.match(r"^[a-zA-Z_-][a-zA-Z0-9_-]*$", name):
             msg = f"invalid name: {name}"
             raise ValueError(msg)
-        self.name = name
+        self.name = name.strip()
         self.description = description
         self.save(exist_ok=True)
 
@@ -133,7 +134,7 @@ class Experiment:
 TABLE_CREATE_SQL = """CREATE TABLE IF NOT EXISTS runs (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 key TEXT,
-value JSON,
+value TEXT,
 type TEXT,
 step INTEGER,
 FOREIGN KEY (step) REFERENCES runs (id) ON DELETE CASCADE,
@@ -242,7 +243,7 @@ class Run:
             cursor = conn.cursor()
             result = cursor.execute(
                 "INSERT INTO runs VALUES (NULL, ?, ?, ?, ?)",
-                (key, value, type, step),
+                (key, json.dumps(value), type, step),
             )
             conn.commit()
         except sqlite.Error as e:
@@ -315,7 +316,10 @@ class Run:
             if step not in edges:
                 edges[step] = []
             edges[step].append(id)
-        nodes = {id: (key, value, type) for id, key, value, type, _ in results}
+        nodes = {
+            id: (key, json.loads(value), type)
+            for id, key, value, type, _ in results
+        }
         tree = build_nested_tree(nodes, edges)
         values = filter_by_var(tree, var)
         return pd.DataFrame(values)

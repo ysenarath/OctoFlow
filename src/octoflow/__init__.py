@@ -4,7 +4,7 @@ from octoflow import logging
 from octoflow.config import config
 from octoflow.utils.config import Config
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "Config",
