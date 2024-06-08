@@ -7,7 +7,7 @@ import json
 import typing
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Type, TypeVar, Union
 from uuid import UUID
 
 from typing_extensions import ParamSpec
@@ -34,13 +34,13 @@ def import_object(s: Union[str, dict]) -> Any:
 
 
 def invoke(
-    __obj: Union[str, Callable[P, T]],
+    __callable: Union[str, Callable[P, T]],
     __partial: bool = False,
     /,
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> T:
-    obj = __obj
+    obj = __callable
     if isinstance(obj, str):
         obj: Callable[P, T] = import_object(obj)
     if __partial:
@@ -176,3 +176,8 @@ def dump(obj: Any) -> Any:
 
 def load(obj: Any) -> Any:
     return json_loads(json.dumps(obj))
+
+
+class Mapped(Generic[T]):
+    def __new__(cls) -> Union[T, Dict[str, Any], str]:
+        return super().__new__()
