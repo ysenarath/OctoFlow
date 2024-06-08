@@ -34,7 +34,7 @@ class MonthDayNano(NamedTuple):
 
 class Undefined(pa.ExtensionType):
     def __init__(self):
-        super().__init__(pa.null(), "tklearn.base.arrow.undefined")
+        super().__init__(pa.null(), "octoflow.data.types.Undefined")
 
     def __arrow_ext_serialize__(self) -> bytes:  # noqa: PLW3201
         return b""
@@ -143,6 +143,9 @@ def from_dtype(dtype: Union[type, np.dtype, None]) -> pa.DataType:
             return from_dataclass(dtype)
         if issubclass(dtype, _TypedDictMeta):
             return from_typed_dict(dtype)
+        # if issubclass(dtype, np.ndarray):
+        #     (item_arg,) = type_args
+        #     return pa.list_(pa.field("item", from_dtype(item_arg)))
         if issubclass(dtype, list):
             (item_arg,) = type_args
             return pa.list_(pa.field("item", from_dtype(item_arg)))
@@ -353,3 +356,26 @@ def infer_type(obj: Any) -> pa.DataType:
             return pa.time32(unit)
         return pa.time64(unit)
     return from_dtype(type(obj))
+
+
+class TensorLike(pa.ExtensionType):
+    def __init__(self, dtype: np.dtype, shape: tuple[int, ...]):
+        self.dtype = dtype
+        self.shape = shape
+        for dim in shape[::-1]:
+            dtype = pa.list_(dtype, dim)
+        super().__init__(
+            dtype,
+            f"octoflow.data.types.TensorLike[{self.dtype}, {self.shape}]",
+        )
+
+    def __arrow_ext_serialize__(self) -> bytes:  # noqa: PLW3201
+        return b""
+
+    @classmethod
+    def __arrow_ext_deserialize__(cls, storage_type, serialized) -> TensorLike:
+        shape = []
+        while pa.is_list(storage_type):
+            storage_type = storage_type.value_type
+            shape.append(storage_type.list_size)
+        return TensorLike(storage_type, tuple(shape))
