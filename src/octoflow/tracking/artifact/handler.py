@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Type, Union
 
-from octoflow.data.metadata import Metadata
+from octoflow.data.metadata import MetadataFile
 
 _handler_types: Dict[str, Type[ArtifactHandler]] = {}
 
@@ -38,7 +38,7 @@ def get_handler_type_by_object(obj: Any) -> Type[ArtifactHandler]:
 
 
 def get_handler_type_by_path(path: Union[str, Path]) -> Type[ArtifactHandler]:
-    metadata = Metadata(Path(path) / METADATA_FILENAME)
+    metadata = MetadataFile(Path(path) / METADATA_FILENAME)
     if not path.exists():
         msg = f"artifact without metadata at '{path}'"
         raise FileNotFoundError(msg)
@@ -80,7 +80,7 @@ class ArtifactHandler(metaclass=ArtifactHandlerType):
         super().__init__()
         path = Path(path)
         (path / "data").mkdir(parents=True, exist_ok=True)
-        self.metadata = Metadata(path / METADATA_FILENAME)
+        self.metadata = MetadataFile(path / METADATA_FILENAME)
         if TYPE_FIELD in self.metadata:
             if self.metadata[TYPE_FIELD] == self.__class__.name:
                 return
