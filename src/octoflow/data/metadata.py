@@ -5,12 +5,15 @@ from typing import Any, Dict, Generator, Optional, Union
 from octoflow.utils.collections import MutableDict
 
 __all__ = [
-    "Metadata",
+    "MetadataFile",
     "unify_metadata",
 ]
 
 
-class Metadata(MutableDict[str, Any]):
+class Metadata(MutableDict[str, Any]): ...
+
+
+class MetadataFile(Metadata):
     def __init__(self, __path: Union[str, Path]) -> None:
         path = Path(__path)
         if path.is_dir():
@@ -36,13 +39,25 @@ class Metadata(MutableDict[str, Any]):
             return json.load(f)
 
 
+def get_metadata(obj: Any) -> Metadata:
+    metadata = None
+    if hasattr(obj, "metadata"):
+        metadata = obj.metadata
+    # convert to Metadata
+    if metadata is None:
+        return Metadata()
+    if isinstance(metadata, Metadata):
+        return metadata
+    return Metadata(metadata)
+
+
 def unify_metadata(left: Any, right: Any) -> Optional[dict]:
     # merge metadata left then right
     #   (right metadata will overwrite left metadata)
-    metadata = left.metadata
-    if metadata is None:
-        metadata = right.metadata
-    elif right.metadata is not None:
-        # metadata and right.metadata are not None
-        metadata = {**metadata, **right.metadata}
-    return metadata
+    metadata_l = get_metadata(left)
+    metadata_r = get_metadata(right)
+    if metadata_l is None:
+        return metadata_r
+    if metadata_r is None:
+        return metadata_l
+    return {**metadata_l, **metadata_r}
