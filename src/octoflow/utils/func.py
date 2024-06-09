@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import functools
 import inspect
-from typing import Any, Callable, Concatenate, Generic, Union
+from typing import Any, Callable, Generic, Union
 
-from typing_extensions import ParamSpec, Self, TypeVar
+from typing_extensions import Concatenate, ParamSpec, Self, TypeVar
 
 __all__ = [
     "MethodMixin",
