@@ -8,12 +8,16 @@ from typing import (
     Type,
     TypeVar,
     Union,
-    Unpack,
 )
 
 from sqlalchemy import Table
 from sqlalchemy.orm import registry as registry_cls
-from typing_extensions import TypedDict, dataclass_transform, get_type_hints
+from typing_extensions import (
+    TypedDict,
+    Unpack,
+    dataclass_transform,
+    get_type_hints,
+)
 
 from octoflow.data.expression import Field, field, field_from_dataclass_field
 
