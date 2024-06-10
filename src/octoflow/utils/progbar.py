@@ -5,7 +5,7 @@ import io
 import json
 import sys
 import weakref
-from typing import Any, Iterable, List, Optional, Union
+from typing import Any, Iterable, List, Optional, TypeVar, Union
 
 import pandas as pd
 from IPython.display import display as ipy_display
@@ -20,6 +20,32 @@ from octoflow.utils import func
 __all__ = [
     "ProgressBar",
 ]
+
+T = TypeVar("T")
+
+dataframe_css = """<style scoped>
+    .dataframe {
+        font-family: Arial, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .dataframe th, .dataframe td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .dataframe tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+
+    .dataframe th {
+        background-color: #4CAF50;
+        color: white;
+    }
+</style>"""
 
 
 class ProgressBarIO(io.StringIO):
@@ -52,23 +78,18 @@ class ProgressBarTable:
         self.get_pbar = weakref.ref(pbar)
         self.data = {}
 
-    def to_string(self) -> str:
-        return tabulate(self.data, headers="keys", tablefmt="psql")
-
-    def to_html(self) -> str:
-        return pd.DataFrame(self.data).to_html(index=False)
-
     @property
     def container(self) -> str:
         return widgets.HTML(self.to_html())
 
-    def add_row(self, row: dict) -> None:
+    def add_row(self, *args, **kwargs) -> None:
+        row = dict(*args, **kwargs)
         prow = {}
         for key, value in row.items():
             # make sure the data is json serializable
             with contextlib.suppress(TypeError):
                 prow[key] = json.loads(json.dumps(value))
-        num_rows = len(next(iter(self.data.values()))) if self.data else 0
+        num_rows = self.num_rows
         keys = set(self.data.keys()).union(row.keys())
         table_data: dict[str, List[Optional[Any]]] = {}
         for key in keys:
@@ -79,48 +100,49 @@ class ProgressBarTable:
                 table_data[key] = [None] * num_rows
             table_data[key].append(value)
         self.data = table_data
-        self.get_pbar().refresh()
+        pbar = self.get_pbar()
+        pbar.refresh()
+
+    @property
+    def num_rows(self) -> int:
+        return len(next(iter(self.data.values()))) if self.data else 0
+
+    def to_string(self) -> str:
+        return tabulate(self.data, headers="keys", tablefmt="psql")
+
+    def to_html(self) -> str:
+        table = pd.DataFrame(self.data).to_html(
+            index=False, classes="dataframe", border=1
+        )
+        return f"<div>{dataframe_css}{table}</div>"
 
 
-class ProgressBar:
+class ProgressBar(Iterable[T]):
     def __init__(self, *args, **kwargs):
         nb = nb_tqdm in auto_tqdm.__bases__
         # nb = False
-        # self.table: dict[str, List[Optional[Any]]] = {}
         self.table = ProgressBarTable(self)
         if nb:
             bound_tqdm = func.bind(nb_tqdm, *args, **kwargs)
-            display = bound_tqdm.keywords.pop("display", False)
-            bound_tqdm.keywords["display"] = None
+            # display = bound_tqdm.keywords.pop("display", False)
+            bound_tqdm.keywords["display"] = False
             self.tqdm = bound_tqdm()
-            container = widgets.VBox([
-                self.tqdm.container,
-                widgets.HTML("<hr>"),
-                self.table.container,
-            ])
+            container = widgets.VBox([])
             ipy_display(container)
+            self.container = container
+            self.refresh()
         else:
             container = ProgressBarIO(self)
-            display = kwargs.pop("display", False)
+            # display = kwargs.pop("display", False)
             kwargs.update({"file": container, "ascii": False})
             self.tqdm = std_tqdm(*args, **kwargs)
-        self.container = container
+            self.container = container
 
-    def __iter__(self) -> Iterable[Any]:
-        return iter(self.tqdm)
+    def __iter__(self) -> Iterable[T]:
+        yield from self.tqdm
 
     def update(self, n: Union[int, float] = 1) -> None:
         self.tqdm.update(n)
-
-    def refresh(self) -> None:
-        if isinstance(self.container, ProgressBarIO):
-            self.container.display()
-        else:
-            self.container.children = [
-                self.tqdm.container,
-                widgets.HTML("<hr>"),
-                self.table.container,
-            ]
 
     def set_postfix(self, *args, **kwargs) -> None:
         self.tqdm.set_postfix(*args, **kwargs)
@@ -132,3 +154,18 @@ class ProgressBar:
 
     def close(self) -> None:
         self.tqdm.close()
+
+    def refresh(self) -> None:
+        if isinstance(self.container, ProgressBarIO):
+            # display the progress bar and table (replace or print)
+            self.container.display()
+        elif self.table.num_rows > 0:
+            # update the table
+            self.container.children = [
+                self.tqdm.container,
+                self.table.container,
+            ]
+        else:
+            self.container.children = [
+                self.tqdm.container,
+            ]
