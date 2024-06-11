@@ -1,8 +1,7 @@
 import math
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, List, Sequence
 
 import numpy as np
-import numpy.typing as nt
 import pandas as pd
 
 __all__ = [
@@ -18,7 +17,7 @@ class Sampler:
             return {key: data.iloc[val] for key, val in out.items()}
         return {key: data[val] for key, val in out.items()}
 
-    def sample(self, data: Sequence[Any]) -> Dict[str, nt.NDArray[np.int64]]:
+    def sample(self, data: Sequence[Any]) -> Dict[str, List[int]]:
         raise NotImplementedError
 
 
@@ -26,7 +25,7 @@ class RandomSampler(Sampler):
     def __init__(self, *args, **kwargs):
         self.counts = dict(*args, **kwargs)
 
-    def sample(self, data: Sequence[Any]) -> Dict[str, nt.NDArray[np.int64]]:
+    def sample(self, data: Sequence[Any]) -> Dict[str, List[int]]:
         n = len(data)
         indexes = np.arange(n)
         np.random.shuffle(indexes)
@@ -40,5 +39,6 @@ class RandomSampler(Sampler):
             args.append(b)
             keys.append(key)
         return {
-            key: indexes[args[i] : args[i + 1]] for i, key in enumerate(keys)
+            key: indexes[args[i] : args[i + 1]].tolist()
+            for i, key in enumerate(keys)
         }
