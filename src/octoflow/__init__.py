@@ -5,7 +5,7 @@ from octoflow.config import config
 from octoflow.core import Module, Task
 from octoflow.utils.config import Config
 
-__version__ = "0.1.13"
+__version__ = "0.1.14"
 
 __all__ = [
     "Config",
