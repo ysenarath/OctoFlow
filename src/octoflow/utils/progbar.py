@@ -11,7 +11,6 @@ import pandas as pd
 from IPython.display import display as ipy_display
 from ipywidgets import widgets
 from tabulate import tabulate
-from tqdm import tqdm as std_tqdm
 from tqdm.auto import tqdm as auto_tqdm
 from tqdm.notebook import tqdm as nb_tqdm
 
@@ -135,7 +134,7 @@ class ProgressBar(Iterable[T]):
             container = ProgressBarIO(self)
             # display = kwargs.pop("display", False)
             kwargs.update({"file": container, "ascii": False})
-            self.tqdm = std_tqdm(*args, **kwargs)
+            self.tqdm = nb_tqdm(*args, **kwargs)
             self.container = container
 
     def __iter__(self) -> Iterable[T]:
