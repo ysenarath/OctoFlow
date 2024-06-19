@@ -598,6 +598,17 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         """
         return pl.scan_ipc(self.path / "data" / "*.arrow")
 
+    def to_pandas(self) -> pd.DataFrame:
+        """
+        Convert the dataset to a pandas DataFrame.
+
+        Returns
+        -------
+        pd.DataFrame
+            The pandas DataFrame.
+        """
+        return self._wrapped.to_pandas()
+
 
 def gen_unique_cached_path(
     *refs: Any, cache_dir: Union[str, Path, None] = None
