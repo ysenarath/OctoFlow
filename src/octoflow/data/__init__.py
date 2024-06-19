@@ -7,7 +7,7 @@ from octoflow.data.dataclass import field
 from octoflow.data.dataset import DEFAULT_FORMAT, Dataset
 from octoflow.data.expression import Expression, scalar
 from octoflow.data.loaders import dataloader
-from octoflow.data.loaders import loaders as _loaders
+from octoflow.data.loaders import loaders as _loaders, aliases
 
 __all__ = [
     "Dataset",
@@ -52,6 +52,8 @@ def load_dataset(
     Dataset
         The loaded dataset.
     """
+    if __loader in aliases:
+        __loader = aliases[__loader]
     loader = _loaders.get(__loader)
     if loader is None:
         # notify the user that the loader is not found

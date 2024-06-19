@@ -26,3 +26,7 @@ dataset = dataset.rename({"name": "original_name"})
 logger.info(dataset[0])
 
 logger.info(dataset.path)
+
+hf_dataset = load_dataset("hf", "imdb")
+
+print(hf_dataset)

@@ -17,6 +17,8 @@ from typing import (
 )
 
 import pandas as pd
+from datasets import DatasetDict as HuggingFaceDatasetDict
+from datasets import load_dataset
 from typing_extensions import ParamSpec
 
 from octoflow import logging
@@ -30,6 +32,7 @@ R = TypeVar("R")
 F = TypeVar("F", bound=Callable[..., Any])
 
 loaders: Dict[str, DatasetLoader] = {}
+aliases: Dict[str, str] = {}
 
 
 class DatasetLoader(BaseDatasetLoader):
@@ -40,6 +43,7 @@ class DatasetLoader(BaseDatasetLoader):
         extensions: Optional[list[str]] = None,
         path_arg: Optional[str] = None,
         wraps: Optional[Callable[P, R]] = None,
+        aliases: Optional[List[str]] = None,
     ):
         """
         Initialize a dataset loader.
@@ -67,6 +71,9 @@ class DatasetLoader(BaseDatasetLoader):
         self.extensions = extensions
         self.path_arg = path_arg
         self.wraps = wraps
+        self.aliases = (
+            [aliases] if isinstance(aliases, str) else aliases
+        ) or []
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """
@@ -118,6 +125,7 @@ def dataloader(
     extensions: Optional[list[str]] = None,
     wraps: Optional[Callable[P, R]] = None,
     path_arg: Optional[str] = None,
+    aliases: Optional[List[str]] = None,
 ) -> F:
     """
     Decorator to register a function as a dataset loader.
@@ -134,6 +142,8 @@ def dataloader(
         The function to wrap, by default None.
     path_arg : Optional[str], optional
         The name of the argument that is the path, by default None.
+    aliases : Optional[List[str]], optional
+        The aliases of the loader, by default None.
 
     Returns
     -------
@@ -149,6 +159,7 @@ def dataloader(
     extensions: Optional[list[str]] = None,
     wraps: Optional[Callable[P, R]] = None,
     path_arg: Optional[str] = None,
+    aliases: Optional[List[str]] = None,
 ) -> Callable[[F], F]:
     """
     Decorator to register a function as a dataset loader.
@@ -163,6 +174,8 @@ def dataloader(
         The function to wrap, by default None.
     path_arg : Optional[str], optional
         The name of the argument that is the path, by default None.
+    aliases : Optional[List[str]], optional
+        The aliases of the loader, by default None.
 
     Returns
     -------
@@ -178,6 +191,7 @@ def dataloader(
     extensions: Optional[list[str]] = None,
     wraps: Optional[Callable[..., Any]] = None,
     path_arg: Optional[str] = None,
+    aliases: Optional[List[str]] = None,
 ) -> Union[F, Callable[[F], F]]:
     """
     Decorator to register a function as a dataset loader.
@@ -194,6 +208,8 @@ def dataloader(
         The function to wrap, by default None.
     path_arg : Optional[str], optional
         The name of the argument that is the path, by default None.
+    aliases : Optional[List[str]], optional
+        The aliases of the loader, by default None.
 
     Returns
     -------
@@ -208,6 +224,7 @@ def dataloader(
             extensions=extensions,
             wraps=wraps,
             path_arg=path_arg,
+            aliases=aliases,
         )
     elif isinstance(func, str):
         # out type: Callable[[F], F]
@@ -217,6 +234,7 @@ def dataloader(
             extensions=extensions,
             wraps=wraps,
             path_arg=path_arg,
+            aliases=aliases,
         )
     loader = DatasetLoader(
         func,
@@ -224,11 +242,18 @@ def dataloader(
         extensions=extensions,
         path_arg=path_arg,
         wraps=wraps,
+        aliases=aliases,
     )
     if loader.name in loaders:
         msg = f"loader with name '{loader.name}' already exists"
         raise ValueError(msg)
     loaders[loader.name] = loader
+    aliases = globals()["aliases"]
+    for alias in loader.aliases:
+        if alias in aliases:
+            msg = f"alias '{alias}' already exists"
+            raise ValueError(msg)
+        aliases[alias] = loader.name
     # out type: F
     return func
 
@@ -334,3 +359,45 @@ def load_csv(
                 orient="records"
             )
         yield pd.read_csv(p, encoding=encoding)
+
+
+@dataloader(
+    name="huggingface",
+    path_arg="path",
+    aliases=["hf"],
+)
+def load_huggingface_dataset(
+    path: str,
+    name: Optional[str] = None,
+    dict_key_col: Optional[str] = "fold",
+):
+    """
+    Load a dataset from the Hugging Face datasets library.
+
+    Parameters
+    ----------
+    path : str
+        The name of the dataset.
+    name : Optional[str], optional
+        The name of the dataset, by default None.
+    dict_key_col : Optional[str], optional
+        The name of the column to add to the dataset, by default "fold".
+
+    Returns
+    -------
+    dict
+        The loaded dataset.
+    """
+    dset = load_dataset(path, name)
+    if isinstance(dset, HuggingFaceDatasetDict):
+        for key in dset:
+            for table in dset[key].data.to_batches():
+                if dict_key_col is not None:
+                    yield table.append_column(
+                        dict_key_col,
+                        [key] * table.num_rows,
+                    )
+                else:
+                    yield table
+    else:
+        yield dset.data
