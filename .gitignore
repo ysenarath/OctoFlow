@@ -163,3 +163,4 @@ logs/
 scratch/
 examples/data.jsonl
 examples/project/
+examples/example.db*
