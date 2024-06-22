@@ -80,6 +80,7 @@ class ModelMeta(type):
         if table is not None and not hasattr(cls, "__table__"):
             cls.__table__ = table
         cls = dc.dataclass(cls)
+        # see for usage: https://docs.sqlalchemy.org/en/20/orm/dataclasses.html#mapping-pre-existing-dataclasses-using-declarative-with-imperative-table
         registry = kwargs.get("registry", None)
         if table is not None and registry is not None:
             return registry.mapped(cls)
