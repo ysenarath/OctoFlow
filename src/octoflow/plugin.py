@@ -55,12 +55,12 @@ class Package:
                     name=name,
                     package=package,
                 )
-            except Exception:
+            except Exception as e:
                 msg = (
                     f"failed to import '{name}' from "
                     f"'{package}' in '{self.name}'"
                 )
-                raise ImportError(msg) from None
+                raise ImportError(msg) from e
             if not hasattr(module, "__all__"):
                 continue
             for name in module.__all__:
