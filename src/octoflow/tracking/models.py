@@ -41,13 +41,14 @@ class Experiment:
         name: str,
         description: Optional[str] = None,
     ):
-        self.path = Path(path)
+        if not isinstance(path, Path):
+            path = Path(path)
         if not re.match(r"^[a-zA-Z_-][a-zA-Z0-9_-]*$", name):
             msg = f"invalid name: {name}"
             raise ValueError(msg)
+        self.path = path
         self.name = name.strip()
         self.description = description
-        self.save(exist_ok=True)
 
     def save(self, exist_ok: bool = False) -> None:
         path = Path(self.path) / self.name / "metadata.json"
@@ -70,6 +71,9 @@ class Experiment:
         return cls(path, **metadata)
 
     def start_run(self, name: Union[str, Task]) -> Run:
+        if isinstance(name, Task):
+            name = hashing.hash(name.get_params())
+        self.save(exist_ok=True)
         return Run(Path(self.path) / self.name / "runs" / name)
 
     def run_task(self, task: Task) -> None:
@@ -78,7 +82,9 @@ class Experiment:
         return task.run(run)
 
     def cleanup(
-        self, name_or_task: Union[str, Task], force: bool = False
+        self,
+        name_or_task: Union[str, Task],
+        force: bool = False,
     ) -> List[Path]:
         if isinstance(name_or_task, Task):
             run_name = hashing.hash(name_or_task.get_params())
