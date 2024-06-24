@@ -164,3 +164,4 @@ scratch/
 examples/data.jsonl
 examples/project/
 examples/example.db*
+examples/runs/task-*.hash
