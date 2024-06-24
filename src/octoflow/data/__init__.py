@@ -6,8 +6,8 @@ from typing import Optional, Union
 from octoflow.data.dataclass import field
 from octoflow.data.dataset import DEFAULT_FORMAT, Dataset
 from octoflow.data.expression import Expression, scalar
-from octoflow.data.loaders import dataloader
-from octoflow.data.loaders import loaders as _loaders, aliases
+from octoflow.data.loaders import aliases, dataloader
+from octoflow.data.loaders import loaders as _loaders
 
 __all__ = [
     "Dataset",
