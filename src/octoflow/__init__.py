@@ -2,7 +2,7 @@ import contextlib
 
 from octoflow import logging
 from octoflow.config import config
-from octoflow.core import Module, Task
+from octoflow.core import Module, Task, TaskManager
 from octoflow.utils.config import Config
 
 __version__ = "0.1.16"
@@ -11,6 +11,7 @@ __all__ = [
     "Config",
     "Module",
     "Task",
+    "TaskManager",
     "config",
     "logger",
     "logging",
