@@ -6,7 +6,6 @@ import sqlite3 as sqlite
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
-import pandas as pd
 from typing_extensions import Literal
 
 from octoflow.tracking.artifact.handler import (
@@ -27,6 +26,12 @@ class RunState(enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     RUNNING = "running"
+
+
+class RunArgs(NamedTuple):
+    path: Path
+    name: str
+    version: int
 
 
 TABLE_CREATE_SQL = """CREATE TABLE IF NOT EXISTS runs (
@@ -55,10 +60,46 @@ UNIQUE_PARAM_NULL_STEP_INDEX_SQL = """CREATE UNIQUE INDEX IF NOT EXISTS
 ix_runs_key_null_step_param ON runs (key, value)
 WHERE type = 'param' AND step IS NULL"""
 
+INSERT_QUERY = "INSERT INTO runs (key, value, type, step) VALUES (?, ?, ?, ?)"
+
+
+def _prepare_run(path: Union[str, Path], name: Optional[str]) -> Path:
+    path = Path(path)
+    if name is None:
+        return path
+    version = 0
+    while True:
+        # version starts from 1
+        version += 1
+        run_path = path / f"{name}-v{version}"
+        try:
+            # try to create the directory
+            run_path.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            # check with the next version
+            continue
+    conn = sqlite.connect(run_path / "values.db")
+    try:
+        cursor = conn.cursor()
+        cursor.execute(TABLE_CREATE_SQL)
+        cursor.execute(UNIQUE_METRIC_INDEX_SQL)
+        cursor.execute(UNIQUE_METRIC_NULL_STEP_INDEX_SQL)
+        cursor.execute(UNIQUE_PARAM_INDEX_SQL)
+        cursor.execute(UNIQUE_PARAM_NULL_STEP_INDEX_SQL)
+        conn.commit()
+    except sqlite.Error as e:
+        conn.rollback()
+        msg = f"failed to create database in '{run_path}'"
+        raise ValueError(msg) from e
+    finally:
+        conn.close()
+    return run_path
+
 
 class Run:
-    def __init__(self, path: Union[Path, str], name: str):
-        self.path = self._prepare(path, name)
+    def __init__(self, path: Union[Path, str], name: Optional[str] = None):
+        self.path = _prepare_run(path, name)
         self.state = RunState.RUNNING
 
     @property
@@ -76,39 +117,22 @@ class Run:
             value = RunState(value)
         (self.path / "state").write_text(value.name, encoding="utf-8")
 
-    @staticmethod
-    def _prepare(path: Union[str, Path], name: str) -> Path:
-        path = Path(path)
-        version = 0
-        while True:
-            # version starts from 1
-            version += 1
-            run_path = path / f"{name}-v{version}"
-            try:
-                # try to create the directory
-                run_path.mkdir(parents=True, exist_ok=False)
-                break
-            except FileExistsError:
-                # check with the next version
-                continue
-        conn = sqlite.connect(run_path / "values.db")
+    def _execute(self, record: Tuple[str, str, str, Optional[int]]) -> int:
+        key, value, type, step = record
+        conn = sqlite.connect(self.path / "values.db")
         try:
             cursor = conn.cursor()
-            cursor.execute(TABLE_CREATE_SQL)
-            cursor.execute(UNIQUE_METRIC_INDEX_SQL)
-            cursor.execute(UNIQUE_METRIC_NULL_STEP_INDEX_SQL)
-            cursor.execute(UNIQUE_PARAM_INDEX_SQL)
-            cursor.execute(UNIQUE_PARAM_NULL_STEP_INDEX_SQL)
+            result = cursor.execute(INSERT_QUERY, (key, value, type, step))
             conn.commit()
         except sqlite.Error as e:
             conn.rollback()
-            msg = f"failed to create database at '{run_path}'"
+            msg = f"failed to log {type} '{key}' with value '{value}'"
             raise ValueError(msg) from e
         finally:
             conn.close()
-        return run_path
+        return result.lastrowid
 
-    def log_value(
+    def _log_value(
         self, key: str, value: Any, type: str, step: Optional[int] = None
     ) -> int:
         conn = sqlite.connect(self.path / "values.db")
@@ -123,50 +147,74 @@ class Run:
             if result is None:
                 msg = f"step '{step}' not found"
                 raise ValueError(msg)
-            _, _, _, step_type, _ = result
-            if step_type != "param":
+            if result[3] != "param":  # type
                 msg = f"step '{step}' is not a param type"
                 raise ValueError(msg)
+        record = (key, json.dumps(value), type, step)
+        return self._execute(record)
+
+    def _executemany(
+        self, batch: List[Tuple[str, str, str, Optional[int]]]
+    ) -> Dict[str, int]:
+        out = {}
+        conn = sqlite.connect(self.path / "values.db")
         try:
             cursor = conn.cursor()
-            result = cursor.execute(
-                "INSERT INTO runs VALUES (NULL, ?, ?, ?, ?)",
-                (key, json.dumps(value), type, step),
-            )
+            cursor.executemany(INSERT_QUERY, batch)
+            # Retrieve the ID of the first inserted row in this batch
+            cursor.execute("SELECT last_insert_rowid()")
+            last_id = cursor.fetchone()[0]
             conn.commit()
+            # Calculate the ids for all inserted rows
+            for i, (key, _, _, _) in enumerate(batch):
+                out[key] = last_id - len(batch) + i + 1
         except sqlite.Error as e:
             conn.rollback()
-            msg = f"failed to log {type} '{key}' with value '{value}'"
+            msg = "failed to log values"
             raise ValueError(msg) from e
         finally:
             conn.close()
-        return result.lastrowid
+        return out
+
+    def _log_values(
+        self,
+        values: Dict[str, Any],
+        value_type: str,
+        step: Optional[int] = None,
+        batch_size: int = 1000,
+    ) -> Dict[str, int]:
+        out = {}
+        batches: List[Tuple[str, str, str, Optional[int]]] = []
+        for key, value in values.items():
+            batches.append((key, json.dumps(value), value_type, step))
+            if len(batches) >= batch_size:
+                out.update(self._executemany(batches))
+                batches = []
+        if batches:
+            out.update(self._executemany(batches))
+        return out
 
     def log_param(
         self, key: str, value: Any, *, step: Optional[int] = None
     ) -> int:
-        return self.log_value(key, value, "param", step=step)
+        return self._log_value(key, value, "param", step=step)
 
     def log_params(
         self, params: Dict[str, Any], *, step: Optional[int] = None
     ) -> Dict[str, int]:
-        out = {}
-        for key, value in flatten(params).items():
-            out[key] = self.log_param(key, value, step=step)
-        return out
+        flattened_params = flatten(params)
+        return self._log_values(flattened_params, "param", step=step)
 
     def log_metric(
         self, key: str, value: Any, *, step: Optional[int] = None
     ) -> int:
-        return self.log_value(key, value, "metric", step=step)
+        return self._log_value(key, value, "metric", step=step)
 
     def log_metrics(
         self, metrics: Dict[str, Any], *, step: Optional[int] = None
     ) -> Dict[str, int]:
-        out = {}
-        for key, value in flatten(metrics).items():
-            out[key] = self.log_metric(key, value, step=step)
-        return out
+        flattened_metrics = flatten(metrics)
+        return self._log_values(flattened_metrics, "metric", step=step)
 
     def log_artifact(
         self, __key: str, __obj: Any, /, *args: Any, **kwargs: Any
@@ -206,8 +254,7 @@ class Run:
             for id, key, value, type, _ in results
         }
         tree = build_nested_tree(nodes, edges)
-        values = filter_by_var(tree, var)
-        return pd.DataFrame(values)
+        return filter_by_var(tree, var)
 
     @classmethod
     def from_existing(
@@ -248,12 +295,6 @@ class Run:
             msg = f"invalid run path '{path}'"
             raise ValueError(msg) from None
         return RunArgs(path.parent, name, version)
-
-
-class RunArgs(NamedTuple):
-    path: Path
-    name: str
-    version: int
 
 
 def build_nested_tree(
