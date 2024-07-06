@@ -607,7 +607,7 @@ class Dataset(BaseDataset):  # noqa: PLR0904
         pd.DataFrame
             The pandas DataFrame.
         """
-        return self._wrapped.to_pandas()
+        return self.to_polars().collect().to_pandas()
 
 
 def gen_unique_cached_path(
