@@ -373,7 +373,7 @@ class TensorLike(pa.ExtensionType):
         return b""
 
     @classmethod
-    def __arrow_ext_deserialize__(cls, storage_type, serialized) -> TensorLike:
+    def __arrow_ext_deserialize__(cls, storage_type, serialized) -> TensorLike:  # noqa: PLW3201
         shape = []
         while pa.is_list(storage_type):
             storage_type = storage_type.value_type
