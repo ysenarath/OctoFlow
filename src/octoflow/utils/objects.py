@@ -20,19 +20,6 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-def import_object(s: Union[str, dict]) -> Any:
-    if not isinstance(s, (str, dict)):
-        msg = f"expected str or dict, got {s.__class__.__name__}"
-        raise TypeError(msg)
-    if isinstance(s, dict):
-        s = s["@type"]
-    try:
-        module, name = s.rsplit(".", 1)
-    except ValueError:
-        module, name = "builtins", s
-    return getattr(importlib.import_module(name=module), name)
-
-
 def invoke(
     __callable: Union[str, Callable[P, T]],
     __partial: bool = False,
@@ -49,6 +36,34 @@ def invoke(
         return obj(obj, *args, **kwargs)
     except Exception as ex:
         raise ex
+
+
+def import_object(s: Union[str, dict]) -> Any:
+    if not isinstance(s, (str, dict)):
+        msg = f"expected str or dict, got {s.__class__.__name__}"
+        raise TypeError(msg)
+    if isinstance(s, dict):
+        s = s["@type"]
+    try:
+        module, name = s.rsplit(".", 1)
+    except ValueError:
+        module, name = "builtins", s
+    return getattr(importlib.import_module(name=module), name)
+
+
+class JSONDecoder(json.JSONDecoder):
+    def __init__(self, **kwargs):
+        super().__init__(object_hook=self.__class__.object_hook, **kwargs)
+
+    @staticmethod
+    def object_hook(obj: Any) -> Any:
+        if isinstance(obj, dict) and obj.get("@type"):
+            type_obj = import_object(obj.pop("@type"))
+            args = obj.pop("@args", [])
+            kwargs: dict = obj.pop("@kwargs", {})
+            kwargs.update(obj)
+            return type_obj(*args, **kwargs)
+        return obj
 
 
 class JSONEncoder(json.JSONEncoder):
@@ -145,21 +160,6 @@ def encode_uuid(obj: UUID) -> dict:
         "@type": "uuid.UUID",
         "@args": [str(obj)],
     }
-
-
-class JSONDecoder(json.JSONDecoder):
-    def __init__(self, **kwargs):
-        super().__init__(object_hook=self.__class__.object_hook, **kwargs)
-
-    @staticmethod
-    def object_hook(obj: Any) -> Any:
-        if isinstance(obj, dict) and obj.get("@type"):
-            type_obj = import_object(obj.pop("@type"))
-            args = obj.pop("@args", [])
-            kwargs: dict = obj.pop("@kwargs", {})
-            kwargs.update(obj)
-            return type_obj(*args, **kwargs)
-        return obj
 
 
 def josn_dumps(obj: Any) -> str:

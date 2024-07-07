@@ -62,7 +62,7 @@ class MethodMixin:
 
 
 def bind(
-    __func: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+    __func: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
 ) -> Union[functools.partial, Callable[..., T]]:
     """Bind arguments to a function and return a new function.
 
