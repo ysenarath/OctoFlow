@@ -70,8 +70,6 @@ class JSONDecoder(json.JSONDecoder):
             args = obj.pop("@args", [])
             kwargs: dict = obj.pop("@kwargs", {})
             kwargs.update(obj)
-            args = [load(arg) for arg in args]
-            kwargs = {k: load(v) for k, v in kwargs.items()}
             return type_obj(*args, **kwargs)
         return obj
 
