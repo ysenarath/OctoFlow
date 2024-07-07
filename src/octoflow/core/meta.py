@@ -10,4 +10,5 @@ class OctoFlowMeta(UserDict):
     def __getattr__(self, name: str) -> Any:
         if name in self:
             return self.data[name]
-        return super().__getattr__(name)
+        msg = f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        raise AttributeError(msg)
