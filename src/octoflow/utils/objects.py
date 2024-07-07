@@ -5,7 +5,7 @@ import functools
 import importlib
 import json
 import typing
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Generic, Type, TypeVar, Union
 from uuid import UUID
@@ -20,6 +20,27 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
+def object_to_string(obj):
+    module_name = obj.__module__
+    qual_name = obj.__qualname__
+    return f"{module_name}:{qual_name}"
+
+
+def string_to_object(import_path):
+    if isinstance(import_path, dict):
+        import_path = import_path["@type"]
+
+    module_name, qual_name = import_path.split(":", 1)
+    module = importlib.import_module(module_name)
+
+    # Navigate through the qualified name
+    obj = module
+    for part in qual_name.split("."):
+        obj = getattr(obj, part)
+
+    return obj
+
+
 def invoke(
     __callable: Union[str, Callable[P, T]],
     __partial: bool = False,
@@ -29,26 +50,13 @@ def invoke(
 ) -> T:
     obj = __callable
     if isinstance(obj, str):
-        obj: Callable[P, T] = import_object(obj)
+        obj: Callable[P, T] = string_to_object(obj)
     if __partial:
         return functools.partial(obj, *args, **kwargs)
     try:
         return obj(obj, *args, **kwargs)
     except Exception as ex:
         raise ex
-
-
-def import_object(s: Union[str, dict]) -> Any:
-    if not isinstance(s, (str, dict)):
-        msg = f"expected str or dict, got {s.__class__.__name__}"
-        raise TypeError(msg)
-    if isinstance(s, dict):
-        s = s["@type"]
-    try:
-        module, name = s.rsplit(".", 1)
-    except ValueError:
-        module, name = "builtins", s
-    return getattr(importlib.import_module(name=module), name)
 
 
 class JSONDecoder(json.JSONDecoder):
@@ -58,12 +66,25 @@ class JSONDecoder(json.JSONDecoder):
     @staticmethod
     def object_hook(obj: Any) -> Any:
         if isinstance(obj, dict) and obj.get("@type"):
-            type_obj = import_object(obj.pop("@type"))
+            type_obj = string_to_object(obj.pop("@type"))
             args = obj.pop("@args", [])
             kwargs: dict = obj.pop("@kwargs", {})
             kwargs.update(obj)
+            args = [load(arg) for arg in args]
+            kwargs = {k: load(v) for k, v in kwargs.items()}
             return type_obj(*args, **kwargs)
         return obj
+
+
+def encode_dataclass(obj):
+    if is_dataclass(obj):
+        pkl = object_to_string(obj.__class__)
+        result = [("@type", pkl)]
+        for f in fields(obj):
+            value = dump(getattr(obj, f.name))
+            result.append((f.name, value))
+        return dict(result)
+    return dump(obj)
 
 
 class JSONEncoder(json.JSONEncoder):
@@ -71,12 +92,12 @@ class JSONEncoder(json.JSONEncoder):
 
     def default(self, obj: Any) -> Any:
         cls = self.__class__
+        if is_dataclass(obj.__class__):
+            return encode_dataclass(obj)
         for dis, encoder in cls.dispatch.items():
             if not isinstance(obj, dis):
                 continue
             return encoder(obj)
-        if is_dataclass(obj.__class__):
-            return encode_dataclass(obj)
         return super().default(obj)
 
     @classmethod
@@ -91,17 +112,10 @@ class JSONEncoder(json.JSONEncoder):
         return encoder
 
 
-def encode_dataclass(obj: Any) -> dict:
-    return {
-        "@type": f"{obj.__class__.__module__}.{obj.__class__.__name__}",
-        **asdict(obj),
-    }
-
-
 @JSONEncoder.register(Path)
 def encode_path(obj: Path) -> dict:
     return {
-        "@type": "pathlib.Path",
+        "@type": object_to_string(Path),
         "@args": [str(obj)],
     }
 
@@ -109,7 +123,7 @@ def encode_path(obj: Path) -> dict:
 @JSONEncoder.register(enum.Enum)
 def encode_enum(obj: enum.Enum) -> dict:
     return {
-        "@type": f"{obj.__class__.__module__}.{obj.__class__.__name__}",
+        "@type": object_to_string(obj.__class__),
         "@args": [obj.value],
     }
 
@@ -117,7 +131,7 @@ def encode_enum(obj: enum.Enum) -> dict:
 @JSONEncoder.register(datetime.datetime)
 def encode_datetime(obj: datetime.datetime) -> dict:
     return {
-        "@type": "datetime.datetime",
+        "@type": object_to_string(datetime.datetime),
         "@args": [obj.isoformat()],
     }
 
@@ -125,7 +139,7 @@ def encode_datetime(obj: datetime.datetime) -> dict:
 @JSONEncoder.register(datetime.date)
 def encode_date(obj: datetime.date) -> dict:
     return {
-        "@type": "datetime.date",
+        "@type": object_to_string(datetime.date),
         "@args": [obj.isoformat()],
     }
 
@@ -133,7 +147,7 @@ def encode_date(obj: datetime.date) -> dict:
 @JSONEncoder.register(datetime.time)
 def encode_time(obj: datetime.time) -> dict:
     return {
-        "@type": "datetime.time",
+        "@type": object_to_string(datetime.time),
         "@args": [obj.isoformat()],
     }
 
@@ -141,7 +155,7 @@ def encode_time(obj: datetime.time) -> dict:
 @JSONEncoder.register(datetime.timedelta)
 def encode_timedelta(obj: datetime.timedelta) -> dict:
     return {
-        "@type": "datetime.timedelta",
+        "@type": object_to_string(datetime.timedelta),
         "@args": [obj.total_seconds()],
     }
 
@@ -149,7 +163,7 @@ def encode_timedelta(obj: datetime.timedelta) -> dict:
 @JSONEncoder.register(decimal.Decimal)
 def encode_decimal(obj: decimal.Decimal) -> dict:
     return {
-        "@type": "decimal.Decimal",
+        "@type": object_to_string(decimal.Decimal),
         "@args": [str(obj)],
     }
 
@@ -157,7 +171,7 @@ def encode_decimal(obj: decimal.Decimal) -> dict:
 @JSONEncoder.register(UUID)
 def encode_uuid(obj: UUID) -> dict:
     return {
-        "@type": "uuid.UUID",
+        "@type": object_to_string(UUID),
         "@args": [str(obj)],
     }
 
