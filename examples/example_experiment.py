@@ -1,6 +1,6 @@
 import shutil
 
-from octoflow.core import Task, TaskManager
+from octoflow.pipeline.task import Task, TaskManager
 from octoflow.tracking.run import Run
 
 
