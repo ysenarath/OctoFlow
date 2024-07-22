@@ -5,7 +5,7 @@ from octoflow.config import config
 from octoflow.pipeline.task import Task
 from octoflow.utils.config import Config
 
-__version__ = "0.1.17"
+__version__ = "0.2.0"
 
 __all__ = [
     "Config",
