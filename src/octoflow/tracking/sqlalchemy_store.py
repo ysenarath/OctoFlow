@@ -549,3 +549,6 @@ class SQLAlchemyTrackingStore(TrackingStore):
             )
             values = stmt.order_by(Value.id).all()
         return values
+
+
+class SQLAlchemyStore(SQLAlchemyTrackingStore): ...
